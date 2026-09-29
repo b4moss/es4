@@ -3,7 +3,7 @@
 プロダクトの意味的な pillar 正本（目的・スコープ・技術方針のハブ）。  
 OKF の版索引は [`index.md`](./index.md)（`okf_version` のみ）。本文はここに書く。
 
-実装前の構想を含む。現行の振る舞い仕様は [`specs/`](./specs/)（Options など着地済みドメインから）。これからやる内容は [`roadmap.md`](./roadmap.md) と [`plans/`](./plans/) を参照。
+実装前の構想を含む。現行の振る舞い仕様は [`specs/`](./specs/)（Options / State / Snapshot / Recovery）。これからやる内容は [`roadmap.md`](./roadmap.md) と [`plans/`](./plans/) を参照。
 
 ## 目的・動機（開発の同期）
 
@@ -137,14 +137,14 @@ flowchart LR
 - [roadmap](./roadmap.md) — マイルストーン（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
 - [plans](./plans/) — これからやる内容
 - [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) — スキャフォールド完了・module path・最初の Git タグ方針
-- [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) — State API・公開面・設定既定・Recovery など（PO Q&A）
+- [Phase 1 仕様](./specs/state/) — State / [Snapshot](./specs/snapshot/) / [Recovery](./specs/recovery/) / [Options](./specs/options/)（`v0.2.0` 実装完了・plans から移動済み）
 - [Phase 2 決定事項](./plans/v0.3.0/sqlite-state.md#決定事項) — オンディスク SQLite・Tx API・並行
 - [Phase 3 決定事項](./plans/v0.4.0/external-recovery.md#決定事項) — Adapter 順・世代 TTL・GCS＝S3 互換
 - [Phase 4 決定事項](./plans/v0.5.0/es4-server.md#決定事項) — HTTP REST・`ES4_` 環境変数・Health／Cloud Run
 - [Phase 5 決定事項](./plans/v0.6.0/state-backend-extension.md#決定事項) — その他／Redis・Valkey Unscheduled・最適化境界
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（**残件なし**）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
-- [specs](./specs/) — 現行仕様（Options など）
+- [specs](./specs/) — 現行仕様
 - [tests](./tests/) — テスト仕様
 - [憲章](./charter/) — 開発ルール
 

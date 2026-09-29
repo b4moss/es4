@@ -1,7 +1,7 @@
 # Options（設定）仕様
 
-現行バージョンに存在する振る舞いの正本（Phase 1 スライス: Options のみ）。  
-未実装の State API / Snapshot / Recovery はここに置かず [plans/v0.2.0/minimal-core.md](../../plans/v0.2.0/minimal-core.md) を参照。
+現行バージョンに存在する振る舞いの正本（Phase 1）。  
+State / Snapshot / Recovery の正本は各ドメイン specs を参照。
 
 ## 概要
 
@@ -41,16 +41,18 @@
 
 - 前提: `memory_only` が `true`
 - 手順: Recovery 関連設定（`recovery_path`・`snapshot_interval`・`restore_on_startup`）は**無視して続行**する。設定エラーにはしない
-- 下流（未実装の Recovery / Snapshot）は `Effective()` 相当の値を消費する想定
+- 下流の Snapshot / Recovery は `Effective()` の値を消費する
 
 ### recovery_path
 
-- Recovery のファイルパスは Options の `recovery_path` で渡す（Recovery 実装自体は未着手）
+- Recovery のファイルパスは Options の `recovery_path` で渡す
 
 ## 関連
 
 - テスト仕様: [`docs/tests/options/load.md`](../../tests/options/load.md)
-- 計画（未実装の State / Snapshot / Recovery）: [`docs/plans/v0.2.0/minimal-core.md`](../../plans/v0.2.0/minimal-core.md)
+- State: [`docs/specs/state/`](../state/)
+- Snapshot: [`docs/specs/snapshot/`](../snapshot/)
+- Recovery: [`docs/specs/recovery/`](../recovery/)
 - Server env: [`docs/plans/v0.5.0/es4-server.md`](../../plans/v0.5.0/es4-server.md#決定事項)
 
 ----

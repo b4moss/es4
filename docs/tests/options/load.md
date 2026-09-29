@@ -1,6 +1,6 @@
 # Options — 読み込み・既定・memory_only
 
-Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/specs/options/`](../../specs/options/)。決定事項: [minimal-core](../../plans/v0.2.0/minimal-core.md#決定事項)。
+Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/specs/options/`](../../specs/options/)。
 
 ### Defaults
 

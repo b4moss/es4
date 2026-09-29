@@ -12,7 +12,7 @@
 ## ざっくり範囲
 
 - 必要なディレクトリツリーを **`.gitkeep` のみ**で追加する
-- Go module path・配置レイアウトは下記の決定どおり（公開面は State API のみ、[Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項)）
+- Go module path・配置レイアウトは下記の決定どおり（公開面は State API のみ、[Phase 1 決定事項](../../specs/state/)）
 - 多言語ポートと Docker を見据え、言語別コードは `packages/<lang>/` 配下、コンテナ関連は `docker/` に置く
 
 ツリー（空ディレクトリ + `.gitkeep`）:
@@ -64,7 +64,7 @@ es4/
 
 - SemVer `v0.1.0` はスキャフォールド完了時点の最初の Git タグ候補。後続 Phase の正式版名が決まり次第、フォルダと roadmap を更新する。
 - 本マイルストーンの成果は「空ディレクトリが存在する」こと。実装コードは載せない。
-- 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md) · [versioning-rule](../../charter/versioning-rule.md) · [Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項)
+- 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md) · [versioning-rule](../../charter/versioning-rule.md) · [Phase 1 決定事項](../../specs/state/)
 
 ----
 

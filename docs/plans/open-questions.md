@@ -14,7 +14,7 @@
 | Phase | 暫定 SemVer | 決定事項 |
 |-------|-------------|----------|
 | Phase 0 — スキャフォールド | `v0.1.0` | [scaffold.md](./v0.1.0/scaffold.md#決定事項) |
-| Phase 1 — 最小構成 | `v0.2.0` | [minimal-core.md](./v0.2.0/minimal-core.md#決定事項) |
+| Phase 1 — 最小構成 | `v0.2.0` | [state](../specs/state/) · [snapshot](../specs/snapshot/) · [recovery](../specs/recovery/) · [options](../specs/options/) |
 | Phase 2 — SQLite State | `v0.3.0` | [sqlite-state.md](./v0.3.0/sqlite-state.md#決定事項) |
 | Phase 3 — 外部 Recovery | `v0.4.0` | [external-recovery.md](./v0.4.0/external-recovery.md#決定事項) |
 | Phase 4 — Es4 Server | `v0.5.0` | [es4-server.md](./v0.5.0/es4-server.md#決定事項) |
@@ -31,7 +31,7 @@
 ## 関連
 
 - [pillar](../README.md) · [roadmap](../roadmap.md) · [plans 索引](./README.md)
-- Phase plans: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0](./v0.2.0/minimal-core.md) · [v0.3.0](./v0.3.0/sqlite-state.md) · [v0.4.0](./v0.4.0/external-recovery.md) · [v0.5.0](./v0.5.0/es4-server.md) · [v0.6.0](./v0.6.0/state-backend-extension.md)
+- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0](./v0.3.0/sqlite-state.md) · [v0.4.0](./v0.4.0/external-recovery.md) · [v0.5.0](./v0.5.0/es4-server.md) · [v0.6.0](./v0.6.0/state-backend-extension.md)
 
 ----
 
