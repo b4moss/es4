@@ -22,9 +22,9 @@ State → Snapshot → Recovery という Es4 の基本ライフサイクルを�
 ## メモ
 
 - SemVer `v0.1.0` は暫定割当。正式版名が決まり次第フォルダと roadmap を更新する。
-- 詳細仕様（受け入れ条件・API・テスト方針）は実装直前に `仕様詳細` へ上げて詰める。
+- 詳細仕様（受け入れ条件・API・テスト方針）は実装直前に `仕様詳細` へ上げて詰める。未決の親論点は [open-questions](../open-questions.md)（とくに P1–P8）を先に潰す。
 - 実装完了後は本ファイルを `docs/specs/` の対応ドメインへ**移動**する（plans に残さない）。
-- 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md)
+- 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md) · [open-questions](../open-questions.md)
 
 ----
 

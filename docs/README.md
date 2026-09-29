@@ -136,6 +136,7 @@ flowchart LR
 
 - [roadmap](./roadmap.md) — マイルストーン（Phase 1–5 / 暫定 SemVer）
 - [plans](./plans/) — これからやる内容
+- [open-questions](./plans/open-questions.md) — 未決プロダクト論点（優先度順）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
 - [specs](./specs/) — 現行仕様（現状なし）
 - [tests](./tests/) — テスト仕様（現状なし）
