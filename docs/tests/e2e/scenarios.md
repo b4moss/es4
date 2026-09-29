@@ -1,6 +1,6 @@
-# E2E — テスト仕様（三層・共通カタログ C1–C6）
+# E2E — テスト仕様（共通カタログ C1–C6）
 
-三層 E2E の**テスト仕様**。期待値は [`e2e-spec.md`](./e2e-spec.md) の各層節および実装アサーションに整合する。本ファイルで新規の FAIL 基準は設けない。
+各層 E2E の**テスト仕様**。期待値は [`e2e-spec.md`](./e2e-spec.md) の各層節および実装アサーションに整合する。本ファイルで新規の FAIL 基準は設けない。
 
 振る舞い・構成・隔離の正本: [`e2e-spec.md`](./e2e-spec.md)。  
 ドメイン正本: [`docs/specs/recovery/`](../../specs/recovery/) · [`docs/specs/snapshot/`](../../specs/snapshot/) · [`docs/specs/options/`](../../specs/options/)。
@@ -9,8 +9,9 @@
 - S3: `packages/go/pkg/es4/object_recovery_e2e_test.go` · `packages/go/internal/e2e/` · `docker/e2e/`
 - ファイル SQLite: `packages/go/pkg/es4/file_sqlite_e2e_test.go`
 - インメモリ: `packages/go/pkg/es4/memory_e2e_test.go`
-- `cd packages/go && go test -tags=e2e ./... -count=1`（S3 は RustFS 起動下。未起動時は Object のみ skip）
-- CI: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力）
+- libSQL: `packages/go/pkg/es4/libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go`
+- `cd packages/go && go test -tags=e2e ./... -count=1`（S3 は RustFS 起動下。未起動時は Object のみ skip。libSQL は RustFS 不要）
+- CI: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql）
 
 採用マトリクス: [`e2e-spec.md`](./e2e-spec.md) §0.2。
 
@@ -273,15 +274,155 @@
 
 ----
 
+# D. libSQL Recovery 層
+
+対応: `e2e-spec.md` §L · `TestE2E_LibSQLFile_*` / `TestE2E_LibSQLMemory_*`。RustFS 不要。リモート Turso 非対象。
+
+## D.F File-backed（C1–C5）
+
+### 前提
+
+- `recovery_backend=libsql`、`recovery_libsql_url=file:<temp>/recovery.db`
+- 空 `state_path`（Memory State）。再起動は Close → 再 Open
+- Save は `SnapshotNow`。Save 済み判定は Recovery テーブル行の有無
+
+----
+
+### D.F.1 保存 → 再起動 → リカバリ — C1
+
+対応: §L.F.1 · `TestE2E_LibSQLFile_SaveRestartRestore`
+
+#### 手順
+
+1. Open → Set → `SnapshotNow` → Recovery 行ありを確認
+2. Close → 再 Open → `Get`／`Exists`
+
+#### 期待 — §L.F.1 および実装アサーション
+
+- Save 済みエントリが復元される（JSON 同一、Exists true）
+
+----
+
+### D.F.2 複数キー／階層 — C2
+
+対応: §L.F.2 · `TestE2E_LibSQLFile_MultiKeyHierarchy`
+
+#### 手順
+
+1. 複数キー Set（＋ Tx Commit）→ `SnapshotNow` → Close → 再 Open → 全キー `Get`
+
+#### 期待 — §L.F.2 および実装アサーション
+
+- Save 対象キーがすべて同一 JSON で戻る
+
+----
+
+### D.F.3 未保存は戻らない — C3
+
+対応: §L.F.3 · `TestE2E_LibSQLFile_UnsavedNotRestored`
+
+#### 手順
+
+1. Set するが `SnapshotNow` しない → Close → 再 Open → `Get`
+
+#### 期待 — §L.F.3 および実装アサーション
+
+- Recovery 行は無い
+- `Get` が `ErrNotFound`（`IsNotFound`）
+
+----
+
+### D.F.4 空状態からの起動 — C4
+
+対応: §L.F.4 · `TestE2E_LibSQLFile_EmptyStartup`
+
+#### 手順
+
+1. 空 temp で Open → 空 State を確認
+
+#### 期待 — §L.F.4 および実装アサーション
+
+- 起動成功、Exists false、`Get` が `ErrNotFound`
+
+----
+
+### D.F.5 クリーンアップ・冪等 — C5
+
+対応: §L.F.5 · `TestE2E_LibSQLFile_CleanupIdempotent`
+
+#### 手順
+
+1. Save 済みを作る → clear 2 回
+
+#### 期待 — §L.F.5 および実装アサーション
+
+- 再 clear がエラーにならない
+- Recovery DB が残らない
+
+----
+
+## D.M InMemory（C2・C4・C5）
+
+### 前提
+
+- `recovery_libsql_url=:memory:`、空 `state_path`
+- Open → 基本操作＋プロセス内 `SnapshotNow`。Close→再 Open の復元は検証しない
+
+----
+
+### D.M.2 複数キー／階層（再起動なし）— C2
+
+対応: §L.M.2 · `TestE2E_LibSQLMemory_MultiKeyOps`
+
+#### 手順
+
+1. Open → 複数キー Set（＋ Tx Commit）→ `SnapshotNow` → 同一プロセスで `Get`
+
+#### 期待 — §L.M.2 および実装アサーション
+
+- 全キーの JSON が投入時と同一
+
+----
+
+### D.M.4 空状態からの起動＋基本操作 — C4
+
+対応: §L.M.4 · `TestE2E_LibSQLMemory_EmptyStartup`
+
+#### 手順
+
+1. Open → 空確認 → Set／Get
+
+#### 期待 — §L.M.4 および実装アサーション
+
+- 起動直後は空（Exists false / NotFound）
+- 基本 Set／Get が成功する
+
+----
+
+### D.M.5 クリーンアップ・冪等（最小）— C5
+
+対応: §L.M.5 · `TestE2E_LibSQLMemory_CleanupIdempotent`
+
+#### 手順
+
+1. Set → `SnapshotNow` → Clear 2 回 → Close 2 回
+
+#### 期待 — §L.M.5 および実装アサーション
+
+- Clear／Close の再実行がエラーにならない
+- Clear 後はキーが存在しない
+
+----
+
 ## 非対象
 
 `e2e-spec.md` §6 および §5.6／C6 のとおり:
 
 - TTL／世代剪定の E2E（任意）
-- libSQL Recovery E2E、Es4 Server HTTP E2E
+- リモート Turso／`libsql://` クラウド、Es4 Server HTTP E2E
 - 本番 AWS S3／GCS、Redis／Valkey
 - push／pull_request 自動 CI（E2E は手動 `workflow_dispatch` のみ）
-- インメモリの C1／C3（再起動復元はユースケース外）
+- インメモリ／libSQL Memory の C1／C3（再起動復元はユースケース外）
 
 ----
 
@@ -292,6 +433,7 @@
 - S3: §A.1–§A.5（仕様 §5.1–§5.5）が RustFS 起動下で PASS
 - ファイル SQLite: §B.1–§B.5（C1–C5）が PASS（RustFS 不要）
 - インメモリ: §C.2・§C.4・§C.5 が PASS（RustFS 不要）
+- libSQL: §D.F.1–§D.F.5 および §D.M.2・§D.M.4・§D.M.5 が PASS（RustFS 不要）
 - 期待は各層の e2e-spec 節と一致（新規 FAIL 基準を設けない）
 
 ----

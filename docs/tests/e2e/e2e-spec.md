@@ -1,7 +1,7 @@
 # E2E テスト仕様
 
 正本のドメイン仕様: [`docs/specs/recovery/`](../../specs/recovery/) · [`docs/specs/snapshot/`](../../specs/snapshot/) · [`docs/specs/options/`](../../specs/options/) · [`docs/specs/state/`](../../specs/state/)。  
-本ファイルは es4 の **E2E（エンドツーエンド）** の思想・三層の役割分担・**共通シナリオ定義**、および現時点で実装済みの **S3 互換（RustFS）層**の手順と成功条件を定める。
+本ファイルは es4 の **E2E（エンドツーエンド）** の思想・層の役割分担・**共通シナリオ定義**、および現時点で実装済みの各層（S3 互換・File SQLite・インメモリ・libSQL）の手順と成功条件を定める。
 
 シナリオ別の正常系／異常系整理: [`scenarios.md`](./scenarios.md)（各層の検証基準に整合。S3 互換 §5.1–§5.5 の判定は変更しない）。
 
@@ -17,13 +17,14 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 
 ----
 
-## 0.1 三層の役割分担
+## 0.1 層の役割分担
 
 | 層 | 想定ユーザー | E2E で拾うこと | 再起動を伴うシナリオ |
 |----|--------------|----------------|----------------------|
 | **S3 互換**（Object Recovery × RustFS 等） | **リモート永続**が前提のユーザー | 現行 §5.1–§5.5（本ファイル後半）。判定基準は変更しない | **含める**（Save → プロセス再起動 → Restore） |
 | **ファイル SQLite** | **ローカル永続**のユーザー | 共通カタログから、ローカルファイル永続＋再起動／プロセス再起動を含むものを採用 | **含める** |
 | **インメモリ** | **永続化を期待しない**ユーザー | 起動から基本操作までのフローに絞る | **含めない**（ユースケースから外れる） |
+| **libSQL Recovery** | ローカル libSQL／SQLite 互換 Recovery のユーザー | §L: File-backed は C1–C5、InMemory は C2／C4／C5 | File-backed のみ **含める**（リモート Turso は非対象） |
 
 ### インメモリを E2E 対象から外さない理由
 
@@ -35,16 +36,16 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 
 以下は **共通カタログ**である。各層は ○＝採用、—＝採用しない。S3 互換の ○ は現行 §5.1–§5.5（および任意の §5.6）に対応し、**内容・判定基準は変えない**。
 
-| ID | 共通シナリオ（要約） | S3 互換 | ファイル SQLite | インメモリ |
-|----|----------------------|---------|-----------------|------------|
-| C1 | 保存 → 再起動 → リカバリ（Save 済みのみ戻る） | ○（§5.1） | ○（§F.1） | — |
-| C2 | 複数キー／階層 | ○（§5.2） | ○（§F.2） | ○（§M.2。再起動なし。起動後の複数キー基本操作） |
-| C3 | 未保存は戻らない | ○（§5.3） | ○（§F.3） | — |
-| C4 | 空状態からの起動（欠落は空続行） | ○（§5.4） | ○（§F.4） | ○（§M.4。再起動・Recovery なし。起動直後の空 State／基本操作） |
-| C5 | 隔離リソースのクリーンアップ・冪等 | ○（§5.5） | ○（§F.5。作業ディレクトリ等） | ○（§M.5。プロセス内 Clear／Close の冪等） |
-| C6 | TTL／世代（任意） | 任意（§5.6） | 任意 | — |
+| ID | 共通シナリオ（要約） | S3 互換 | ファイル SQLite | インメモリ | libSQL File | libSQL Memory |
+|----|----------------------|---------|-----------------|------------|-------------|---------------|
+| C1 | 保存 → 再起動 → リカバリ（Save 済みのみ戻る） | ○（§5.1） | ○（§F.1） | — | ○（§L.F.1） | — |
+| C2 | 複数キー／階層 | ○（§5.2） | ○（§F.2） | ○（§M.2。再起動なし。起動後の複数キー基本操作） | ○（§L.F.2） | ○（§L.M.2。再起動なし。SnapshotNow をプロセス内で行使） |
+| C3 | 未保存は戻らない | ○（§5.3） | ○（§F.3） | — | ○（§L.F.3） | — |
+| C4 | 空状態からの起動（欠落は空続行） | ○（§5.4） | ○（§F.4） | ○（§M.4。再起動・Recovery なし。起動直後の空 State／基本操作） | ○（§L.F.4） | ○（§L.M.4） |
+| C5 | 隔離リソースのクリーンアップ・冪等 | ○（§5.5） | ○（§F.5。作業ディレクトリ等） | ○（§M.5。プロセス内 Clear／Close の冪等） | ○（§L.F.5） | ○（§L.M.5） |
+| C6 | TTL／世代（任意） | 任意（§5.6） | 任意 | — | 任意 | — |
 
-ファイル SQLite／インメモリ層の手順・実装パスは §F・§M。共通 ID（C1–C6）との対応を保ち、**S3 互換 §5 の文面・判定基準は改変しない**。
+ファイル SQLite／インメモリ／libSQL 層の手順・実装パスは §F・§M・§L。共通 ID（C1–C6）との対応を保ち、**S3 互換 §5 の文面・判定基準は改変しない**。
 
 ----
 
@@ -60,11 +61,14 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 必須検証コマンド:
 ```text
 # RustFS 起動後（docker compose -f docker/e2e/docker-compose.yml up -d）
-# 三層まとめて（Object は RustFS 必須。未起動時は Object のみ skip）
+# 全層まとめて（Object は RustFS 必須。未起動時は Object のみ skip。libSQL は RustFS 不要）
 cd packages/go && go test -tags=e2e ./... -count=1
 
 # Object のみ（CI は ES4_E2E_REQUIRE_RUSTFS=1 で未起動時 fail）
 cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_ObjectRecovery_' -count=1
+
+# libSQL のみ（file-backed + in-memory。RustFS 不要）
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1
 ```
 
 エンドポイント／認証（Compose 既定）:
@@ -324,10 +328,107 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1
 
 ----
 
+## L. libSQL Recovery 層（v0.7.3）
+
+ローカル libSQL／SQLite 互換 Recovery 向け。リモート Turso（`libsql://` クラウド）は **非対象**（シークレット不要のローカルのみ）。
+
+| サブ層 | 採用カタログ | DSN／配線 |
+|--------|--------------|-----------|
+| **File-backed**（§L.F） | C1–C5 | `recovery_backend=libsql`、`recovery_libsql_url=file:<temp>/recovery.db`（またはプレーンパス） |
+| **InMemory**（§L.M） | C2・C4・C5 のみ | `recovery_libsql_url=:memory:`（Options Open 経路。プロセス局所） |
+
+実装配置:
+- ハーネス: `packages/go/pkg/es4/libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go`（`//go:build e2e`）
+- Compose: **不要**（RustFS 不要。`layer=all` でも libSQL は外部サービスに依存しない）
+- CI: [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `layer=libsql`
+
+必須検証コマンド:
+```text
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1
+```
+
+### L.F File-backed — C1–C5
+
+#### L.F.0 Options と隔離
+
+| キー | E2E 推奨値 |
+|------|------------|
+| `state_path` | **空**（Memory State）。再起動証明は Recovery → Restore に固定 |
+| `recovery_backend` | `libsql` |
+| `recovery_libsql_url` | `file:` + テスト用 temp 配下の `.db` |
+| `restore_on_startup` | `true` |
+| `memory_only` | `false` |
+| `snapshot_interval` | `0`（明示 `SnapshotNow`） |
+
+- テストごと **独立 temp ディレクトリ**。開始時クリアと `t.Cleanup`（成功／失敗とも）で Recovery DB（および WAL／SHM）を削除する
+- Close → 再 Open で Memory State は消え、復元は **libSQL Recovery → Restore** のみに依存する（Object 層と同趣旨）
+- Save 後の実体確認は Recovery テーブル行の有無（Open 時の schema 作成だけでは「Save 済み」とみなさない）
+
+#### L.F.1 C1 — 保存 → 再起動 → リカバリ
+
+1. Open（Memory State + libSQL File Recovery、`restore_on_startup=true`）
+2. State にキーを書く。Tx を使う場合は Commit まで
+3. `SnapshotNow` で libSQL へ Save。Recovery 行が存在することを確認してよい
+4. Close → 同じ `recovery_libsql_url` で再 Open
+5. 手順 2 のキーを `Get` → 同じ JSON。Exists true
+
+#### L.F.2 C2 — 複数キー／階層
+
+- 複数キーを Save 後、再 Open ですべて戻る
+
+#### L.F.3 C3 — 未保存は戻らない
+
+1. Open → Set するが **SnapshotNow しない**
+2. Close → 再 Open
+3. 当該キーは `ErrNotFound`。Recovery 行は無い（schema のみの空 DB は「未 Save」）
+
+#### L.F.4 C4 — 空状態からの起動
+
+1. Recovery が空の temp で Open
+2. 起動成功・State 空（欠落は空続行）
+
+#### L.F.5 C5 — クリーンアップ・冪等
+
+1. Save 済みのあとに fixture clear を実行
+2. 同じパスで clear を再実行してもエラーにならない（冪等）
+
+### L.M InMemory — C2・C4・C5
+
+プロセス局所の `:memory:` Recovery。再起動復元（C1／C3）は採用しない。
+
+#### L.M.0 Options
+
+| キー | E2E 推奨値 |
+|------|------------|
+| `state_path` | 空（Memory State） |
+| `recovery_backend` | `libsql` |
+| `recovery_libsql_url` | `:memory:` |
+| `restore_on_startup` | `true` |
+| `memory_only` | `false`（Recovery を配線する） |
+| `snapshot_interval` | `0` |
+
+#### L.M.2 C2 — 複数キー／階層（再起動なし）
+
+1. Open → 複数キー Set（Tx Commit 含む場合あり）
+2. `SnapshotNow` で Recovery Save をプロセス内で行使
+3. 同一プロセス内で全キーを `Get` → 投入時と同一
+
+#### L.M.4 C4 — 空状態からの起動＋基本操作
+
+1. Open → State 空を確認
+2. 基本的な `Set`／`Get` が成功する
+
+#### L.M.5 C5 — クリーンアップ・冪等（最小）
+
+1. `SnapshotNow` 後に `Clear` を 2 回実行してもエラーにならない
+2. `Close` の再呼び出しがエラーにならない（冪等）
+
+----
+
 ## 6. 非対象
 
 - Redis／Valkey State Backend
-- libSQL Recovery の E2E（別途必要なら共通カタログから採用を決める）
+- リモート Turso／ホスト型 `libsql://` クラウド（本 E2E はローカル file／`:memory:` のみ）
 - Es4 Server HTTP の E2E（本ファイルはライブラリ Open／Recovery 経路。Server 経由は将来拡張）
 - 本番クラウド（AWS S3／GCS）への到達（RustFS ローカルで代替）
 - 負荷・性能 SLO
@@ -355,10 +456,15 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1
 - §M.2・§M.4・§M.5（C2／C4／C5）が `go test -tags=e2e` で PASS（RustFS 不要）
 - 再起動復元を成功条件に含めない
 
+### libSQL 層
+
+- §L.F.1–§L.F.5（File-backed C1–C5）および §L.M.2・§L.M.4・§L.M.5（InMemory C2／C4／C5）が PASS（RustFS 不要）
+- `layer=all` でも libSQL は外部サービスに依存しない
+
 ### 横断
 
-- RustFS 起動下で `cd packages/go && go test -tags=e2e ./... -count=1` が三層とも PASS
-- CI は [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `workflow_dispatch`（`layer` 入力）のみ
+- RustFS 起動下で `cd packages/go && go test -tags=e2e ./... -count=1` が全対象層とも PASS
+- CI は [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `workflow_dispatch`（`layer` 入力: all|object|file|memory|libsql）のみ
 
 ----
 
@@ -366,10 +472,10 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1
 
 - シナリオ別テスト仕様: [`docs/tests/e2e/scenarios.md`](./scenarios.md)
 - Recovery: [`docs/specs/recovery/recovery.md`](../../specs/recovery/recovery.md)
-- Options（`recovery_s3_*`／`state_path`／`memory_only`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
+- Options（`recovery_s3_*`／`recovery_libsql_*`／`state_path`／`memory_only`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
 - Snapshot: [`docs/specs/snapshot/`](../../specs/snapshot/)
 - 単体に近い Object テスト: `packages/go/internal/recovery/object_test.go`（本 E2E とは別。フェイク）
-- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md) · [`docs/plans/v0.7.1/e2e-three-layer.md`](../../plans/v0.7.1/e2e-three-layer.md)
+- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md) · [`docs/plans/v0.7.1/e2e-three-layer.md`](../../plans/v0.7.1/e2e-three-layer.md) · [`docs/plans/v0.7.3/e2e-libsql.md`](../../plans/v0.7.3/e2e-libsql.md)
 
 ----
 
