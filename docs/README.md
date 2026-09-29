@@ -136,6 +136,7 @@ flowchart LR
 
 - [roadmap](./roadmap.md) — マイルストーン（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
 - [plans](./plans/) — これからやる内容
+- [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) — スキャフォールド完了・module path・最初の Git タグ方針
 - [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) — State API・公開面・Recovery など（PO Q&A）
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（優先度順）
 - [wishlist](./wishlist.md) — PO メモ（未整理）

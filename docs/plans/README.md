@@ -7,7 +7,7 @@
 
 | 暫定マイルストーン | Phase | 状態 | ファイル |
 |--------------------|-------|------|----------|
-| `v0.1.0`（暫定） | Phase 0 — スキャフォールド | 方針確定 | [scaffold.md](./v0.1.0/scaffold.md) |
+| `v0.1.0`（暫定） | Phase 0 — スキャフォールド | スキャフォールド完了 | [scaffold.md](./v0.1.0/scaffold.md) |
 | `v0.2.0`（暫定） | Phase 1 — 最小構成 | 方針確定 | [minimal-core.md](./v0.2.0/minimal-core.md) |
 | `v0.3.0`（暫定） | Phase 2 — SQLite State | 意図スタブ | [sqlite-state.md](./v0.3.0/sqlite-state.md) |
 | `v0.4.0`（暫定） | Phase 3 — 外部 Recovery Storage | 意図スタブ | [external-recovery.md](./v0.4.0/external-recovery.md) |
