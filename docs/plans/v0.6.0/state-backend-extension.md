@@ -43,7 +43,7 @@ PO Q&A で確定した Phase 5（`v0.6.0` 暫定）の事実。実装詳細の�
 - **実装完了。** Adapter 境界・Export／Replace・最適化境界・Unscheduled の記述は [`docs/specs/state/state.md`](../../specs/state/state.md) が正本。
 - テスト仕様: [`docs/tests/state/api.md`](../../tests/state/api.md)
 - 本 plan ファイルは履歴・決定事項の参照用に残す（specs へ内容を反映済み。別ドメイン specs へのファイル移動は不要）。
-- SemVer タグ `v0.6.0` はマージ後にコーディネータが打つ（本マイルストーンの PR では打たない）。
+- SemVer タグ `v0.6.0` は **済み**（マージ後にコーディネータが打済み）。
 - 関連: [roadmap](../../roadmap.md) · [Phase 1–2 決定事項](../../specs/state/) · [Tx](../../specs/tx/) · [open-questions](../open-questions.md)（残件なし）
 
 ----

@@ -15,11 +15,12 @@ okf_version: "0.1"
 
 # Project Docs
 
-* [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
+* [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 0–6 / 暫定 SemVer `v0.1.0`–`v0.7.0`）
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
-* [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（実装完了・決定事項／完了注記）
+* [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（実装完了・決定事項／完了注記・Git タグ済み）
+* [plans/v0.7.0/e2e-object-recovery.md](plans/v0.7.0/e2e-object-recovery.md) - Phase 6 E2E Object Recovery × RustFS（実装完了・完了注記）
 * [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
 * [specs](specs/) - 現行機能の仕様正本
 * [specs/options](specs/options/) - Options（設定）
@@ -29,4 +30,4 @@ okf_version: "0.1"
 * [specs/recovery](specs/recovery/) - Recovery（File / libSQL / Object・世代 TTL）
 * [specs/es4-server](specs/es4-server/) - Es4 Server（HTTP・Docker・Health）
 * [tests](tests/) - テスト仕様
-* [tests/options](tests/options/) · [tests/state](tests/state/) · [tests/tx](tests/tx/) · [tests/snapshot](tests/snapshot/) · [tests/recovery](tests/recovery/) · [tests/es4-server](tests/es4-server/)
+* [tests/options](tests/options/) · [tests/state](tests/state/) · [tests/tx](tests/tx/) · [tests/snapshot](tests/snapshot/) · [tests/recovery](tests/recovery/) · [tests/es4-server](tests/es4-server/) · [tests/e2e](tests/e2e/)

@@ -134,14 +134,15 @@ flowchart LR
 
 ## 索引
 
-- [roadmap](./roadmap.md) — マイルストーン（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
+- [roadmap](./roadmap.md) — マイルストーン（Phase 0–6 / 暫定 SemVer `v0.1.0`–`v0.7.0`）
 - [plans](./plans/) — これからやる内容
 - [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) — スキャフォールド完了・module path・最初の Git タグ方針
 - [Phase 1 仕様](./specs/state/) — State / [Snapshot](./specs/snapshot/) / [Recovery](./specs/recovery/) / [Options](./specs/options/)（`v0.2.0` 実装完了・plans から移動済み）
 - [Phase 2 仕様](./specs/state/) — SQLite State / [Tx](./specs/tx/) / [Snapshot](./specs/snapshot/) / [Options](./specs/options/)（`v0.3.0` 実装完了・plans から移動済み）
 - [Phase 3 Recovery / Options](./specs/recovery/) — libSQL / Object・世代 TTL・GCS＝S3 互換
 - [Phase 4 仕様](./specs/es4-server/) — HTTP Es4 Server・Docker・Health（末尾 `/` なし。`v0.5.0` 実装完了・Git タグ済み・plans から移動済み）
-- [Phase 5 仕様](./specs/state/) — Adapter（`Store`）境界・Export deep copy・Replace 原子性・最適化境界（Redis／Valkey Unscheduled。`v0.6.0` 実装完了・[完了注記](./plans/v0.6.0/state-backend-extension.md)）
+- [Phase 5 仕様](./specs/state/) — Adapter（`Store`）境界・Export deep copy・Replace 原子性・最適化境界（Redis／Valkey Unscheduled。`v0.6.0` 実装完了・Git タグ済み・[完了注記](./plans/v0.6.0/state-backend-extension.md)）
+- [Phase 6 E2E](./tests/e2e/) — Object Recovery × RustFS（`v0.7.0` 実装完了・[完了注記](./plans/v0.7.0/e2e-object-recovery.md)）
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（**残件なし**）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
 - [specs](./specs/) — 現行仕様

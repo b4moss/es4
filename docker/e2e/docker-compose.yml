@@ -1,0 +1,36 @@
+# Es4 E2E — RustFS as S3-compatible Object Recovery backend.
+# From repository root:
+#   docker compose -f docker/e2e/docker-compose.yml up -d
+#   curl -sf http://127.0.0.1:9000/health
+# S3 API: http://127.0.0.1:9000  (path-style)
+# Credentials below are E2E-only (not for production).
+
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: es4-e2e-rustfs
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: es4e2eaccess
+      RUSTFS_SECRET_KEY: es4e2esecretkey
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_OBS_LOGGER_LEVEL: error
+      # Keep logs under the data volume (UID 10001 writable); avoid /var/log permission issues.
+      RUSTFS_OBS_LOG_DIRECTORY: /data/logs
+    # Named volume — ephemeral for CI; isolation is via per-test buckets/prefixes.
+    volumes:
+      - es4_e2e_rustfs_data:/data
+    command: ["/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  es4_e2e_rustfs_data:
