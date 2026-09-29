@@ -1,0 +1,49 @@
+{
+  "name": "@b4moss/es4",
+  "version": "0.9.0-dev",
+  "private": true,
+  "description": "Es4 — embedded State store with pluggable Recovery (Node.js/TypeScript port of Go v0.8.0)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e:object": "ES4_E2E_LAYER=object vitest run --config vitest.e2e.config.ts",
+    "test:e2e:file": "ES4_E2E_LAYER=file vitest run --config vitest.e2e.config.ts",
+    "test:e2e:memory": "ES4_E2E_LAYER=memory vitest run --config vitest.e2e.config.ts",
+    "test:e2e:libsql": "ES4_E2E_LAYER=libsql vitest run --config vitest.e2e.config.ts",
+    "test:e2e:redis": "ES4_E2E_LAYER=redis vitest run --config vitest.e2e.config.ts",
+    "test:e2e:valkey": "ES4_E2E_LAYER=valkey vitest run --config vitest.e2e.config.ts",
+    "test:e2e:firestore": "ES4_E2E_LAYER=firestore vitest run --config vitest.e2e.config.ts",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.787.0",
+    "@google-cloud/firestore": "^7.11.0",
+    "ioredis": "^5.6.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.10",
+    "better-sqlite3": "^11.8.1",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

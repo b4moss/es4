@@ -13,7 +13,7 @@
 
 プロダクト知識は **[`docs/`](./docs/)**（OKF）にあります。このルート README はインストールと使い方の**日本語入口**です（英語版が正本）。詳細な仕様と計画は `docs/` に置きます。
 
-現行モノレポのライン: **Git タグ `v0.7.3`**（Go ライブラリのモジュールパスは引き続き `github.com/b4moss/es4/packages/go`）。
+現行モノレポのライン: **Git タグ `v0.8.0`**（Go ライブラリ）。Node.js／TypeScript 移植は **`packages/node`**（v0.9.0。workspace private。npm 公開は未実施）。
 
 ## Purpose（目的）
 
@@ -34,12 +34,21 @@
 | Server | HTTP Es4 Server + Docker image workflows |
 | E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore は **`layer=all` 非対象**） |
 
+**対象内（Node・`packages/node`・マイルストーン v0.9.0）:**
+
+| Layer | Choices |
+|-------|---------|
+| State | Memory · SQLite · Redis／Valkey · Firestore（Go と同 Options 語彙） |
+| Recovery | `file` · `libsql`（ローカル）· `object`（S3 互換）— 内部のみ |
+| Public API | `open` / `close` · State · Tx · HTTP Es4 Server |
+| E2E | Go と同 layer／カタログ ID（`npm run test:e2e:<layer>`） |
+
 **対象外／未実装:**
 
-- Node.js / TypeScript 移植（`packages/node` はスタブ）
+- `@b4moss/es4` の npm 公開（指示があるまで workspace private）
 - プロダクト E2E におけるリモート Turso（`libsql://`）
 - 本番 GCP 必須の Firestore E2E（Emulator のみ）
-- 公開 `SnapshotNow` API（明示フラッシュは `export_test.go` の**テスト用ヘルパ**のみ）
+- 公開 `SnapshotNow` API（明示フラッシュは**テスト用ヘルパ**のみ）
 
 ## Install（インストール）
 
@@ -74,6 +83,25 @@ go run ./cmd/es4-server
 ```
 
 サーバーの Options は `ES4_*` 環境変数から読み込みます（ライブラリ Options と同じ snake_case キー）。[`docs/specs/es4-server/`](./docs/specs/es4-server/) を参照。
+
+### Node.js / TypeScript（`packages/node`）
+
+**要件:** Node.js **20+**。workspace private パッケージ `@b4moss/es4`（[`packages/node/README.md`](./packages/node/README.md)）。
+
+```bash
+cd packages/node
+npm ci
+npm test
+npm run test:e2e:memory   # file|libsql|object|redis|valkey|firestore
+```
+
+```ts
+import { open, defaults } from "@b4moss/es4";
+
+const db = await open({ ...defaults(), memory_only: true });
+await db.set("hello", JSON.stringify({ n: 1 }));
+await db.close();
+```
 
 ## Quick start（クイックスタート）
 

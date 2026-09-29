@@ -27,6 +27,12 @@ go.work.sum
 # env file
 .env
 
+# Node.js (packages/node)
+node_modules/
+packages/node/dist/
+packages/node/coverage/
+*.tsbuildinfo
+
 # Editor/IDE
 # .idea/
 # .vscode/
