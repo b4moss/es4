@@ -28,17 +28,17 @@
 
 | Layer | Choices |
 |-------|---------|
-| State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) |
+| State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) · Firestore (`state_backend=firestore`) |
 | Recovery | `file` · `libsql` (local) · `object` (S3-compatible) |
 | Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` · Tx: `BeginTx` → Commit/Rollback |
 | Server | HTTP Es4 Server + Docker image workflows |
-| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State (`workflow_dispatch`) |
+| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore は **`layer=all` 非対象**） |
 
 **対象外／未実装:**
 
 - Node.js / TypeScript 移植（`packages/node` はスタブ）
 - プロダクト E2E におけるリモート Turso（`libsql://`）
-- Firestore State アダプタ（v0.8.0 の次 PR）
+- 本番 GCP 必須の Firestore E2E（Emulator のみ）
 - 公開 `SnapshotNow` API（明示フラッシュは `export_test.go` の**テスト用ヘルパ**のみ）
 
 ## Install（インストール）
@@ -206,19 +206,32 @@ es4.Open(ctx, options.Options{
 })
 ```
 
+**Firestore State**（Emulator: `FIRESTORE_EMULATOR_HOST` を設定）
+
+```go
+es4.Open(ctx, options.Options{
+    StateBackend:               options.StateBackendFirestore,
+    StateFirestoreProjectID:    "demo-es4",
+    StateFirestoreCollection:   "es4-state",
+    // StateFirestoreDatabaseID: "", // Effective 既定: (default)
+    SnapshotInterval:           0,
+})
+```
+
 ### Product E2E — workflow 層を実行する
 
 E2E は**手動のみ**（`.github/workflows/e2e.yml`、`workflow_dispatch`）。入力 `layer`:
 
 | `layer` | What runs | Extra service |
 |---------|-----------|---------------|
-| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | RustFS 必須。Redis／Valkey は URL 未設定なら skip |
+| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | RustFS 必須。Redis／Valkey／Firestore は env 未設定なら skip |
 | `object` | `TestE2E_ObjectRecovery_*` | RustFS |
 | `file` | `TestE2E_FileSQLite_*` | No |
 | `memory` | `TestE2E_Memory_*` | No |
 | `libsql` | `TestE2E_LibSQL*` (File C1–C5 + Memory C2/C4/C5) | No |
-| `redis` | `TestE2E_RedisState_*` | Compose `redis` |
-| `valkey` | `TestE2E_ValkeyState_*` | Compose `valkey` |
+| `redis` | `TestE2E_RedisState_*` | Compose `redis`（**`all` 非対象**） |
+| `valkey` | `TestE2E_ValkeyState_*` | Compose `valkey`（**`all` 非対象**） |
+| `firestore` | `TestE2E_FirestoreState_*` | Compose `firestore`（**`all` 非対象**） |
 
 ローカルコマンド（リポジトリルート／`packages/go` から）:
 
@@ -251,6 +264,12 @@ go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1 -timeout 10m
 docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
 export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
 go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1 -timeout 10m
+
+# Firestore Emulator（layer=all 非対象）
+docker compose -f docker/e2e/docker-compose.yml up -d --wait firestore
+export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+export ES4_E2E_FIRESTORE_PROJECT_ID=demo-es4
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_FirestoreState_' -count=1 -timeout 10m
 ```
 
 Compose の既定とクリーンアップ: [`docker/e2e/README.md`](./docker/e2e/README.md)。振る舞いカタログ: [`docs/tests/e2e/e2e-spec.md`](./docs/tests/e2e/e2e-spec.md)。
@@ -265,6 +284,7 @@ Compose の既定とクリーンアップ: [`docker/e2e/README.md`](./docker/e2e
 | libSQL File / Memory | `libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go` |
 | Redis State | `redis_state_e2e_test.go` |
 | Valkey State | `valkey_state_e2e_test.go` |
+| Firestore State | `firestore_state_e2e_test.go` |
 
 ### Writing / running libSQL E2E
 

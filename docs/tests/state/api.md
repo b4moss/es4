@@ -3,13 +3,13 @@
 公開 State API（`SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR`）および Adapter 内部契約（Export／Replace／Close）のテスト仕様。  
 正本の振る舞い: [`docs/specs/state/`](../../specs/state/)。
 
-実装: `packages/go/internal/state`（`store_test.go` · `contract_test.go`）と公開面の既存スイート。
+実装: `packages/go/internal/state`（`store_test.go` · `contract_test.go` · `firestore_*.go`）と公開面の既存スイート。
 
 ### Set / Get / Exists / Delete / Clear
 
 - 階層キー（`/`）と任意 JSON 値に対する CRUD。同一プロセス内は内部ロックで直列化。
 - 呼び出しは `context.Context` 付きの同期 API（非同期志向）。
-- Memory / SQLite / Redis で同じ公開契約。
+- Memory / SQLite / Redis / Firestore で同じ公開契約。
 
 #### テスト：正常系
 - `SET` したキーを `GET` で同じ JSON として読める
@@ -27,7 +27,7 @@
 
 ### Store 契約（テーブル駆動・Memory / SQLite / Redis）
 
-同一テストテーブルを各 Backend で実行する（`contract_test.go`。Redis は miniredis）。
+同一テストテーブルを各 Backend で実行する（`contract_test.go`。Redis は miniredis）。Firestore は Emulator 必須の別スイート（`firestore_contract_test.go`）。
 
 #### テスト：正常系
 - Set → Get → Exists true → Delete → Exists false → Get は `ErrNotFound`
@@ -37,6 +37,22 @@
 
 #### テスト: 異常系
 - 両 Backend で無効キー／不正 JSON が同じ sentinel（`ErrInvalidKey`／`ErrInvalidValue`）
+
+### Firestore 行列（Emulator）
+
+`FIRESTORE_EMULATOR_HOST` 必須。未設定はローカル skip／CI（`ES4_TEST_REQUIRE_FIRESTORE=1`）は fail。
+
+#### キー写像
+- Doc ID = パス・パーセントエンコード（`a/b/c` → `a%2Fb%2Fc`）。Export キーは論理キー
+- エンコード後 ID が 1500 バイト超過 → `ErrFirestoreDocIDTooLong`
+
+#### Clear 隔離（必須）
+- 別 collection に直接書き込み後、対象 Store で Clear／空 Replace → 対象のみ空。**他 collection は残る**
+
+#### 永続・隔離
+- Close → 再 Open（同 project／database／collection）で内容が残る
+- 別 collection は非干渉
+- Export → Memory へ Replace でラウンドトリップ一致
 
 ### Export 独立性（deep copy）
 
@@ -55,7 +71,7 @@
 
 #### テスト: 異常系
 - Close 後の Set／Get／Delete／Exists／Clear／Export／Replace／BeginTx → `ErrClosed`（または wrap）
-- 二重 Close は Memory／SQLite／Redis とも冪等（エラーなし）
+- 二重 Close は Memory／SQLite／Redis／Firestore とも冪等（エラーなし）
 
 ### Memory / SQLite / Redis Export / Replace ラウンドトリップ
 
@@ -87,14 +103,19 @@
 ### Open 配線
 
 #### テスト：正常系
-- `memory_only` → Memory（redis 設定があっても redis に書かない）
+- `memory_only` → Memory（redis／firestore 設定があっても書かない）
 - `state_backend=redis|valkey` + URL → Redis アダプタ
+- `state_backend=firestore` + 必須キー + Emulator → Firestore
 - `state_backend=memory` → Memory（`state_path` 無視可）
 - `state_path` 非空 → SQLite
 - `state_path` 空 → Memory
 - `OpenWith` 注入が優先
 - SQLite + `recovery_path` + `restore_on_startup` で Restore 可（欠落は空続行）
 - `memory_only` 時 Recovery R/W なし
+
+#### テスト: 異常系
+- firestore 必須キー欠落 → Validate／Open エラー
+- 到達不能 `FIRESTORE_EMULATOR_HOST` → Open または初回操作でエラー
 
 ----
 

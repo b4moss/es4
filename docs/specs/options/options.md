@@ -1,6 +1,6 @@
 # Options（設定）仕様
 
-現行バージョンに存在する振る舞いの正本（Phase 1–3）。  
+現行バージョンに存在する振る舞いの正本（Phase 1–3、v0.8.0 で State Backend キー追加）。  
 State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 
 ## 概要
@@ -24,9 +24,12 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 | `recovery_s3_region` | string | `""` | `ES4_RECOVERY_S3_REGION` |
 | `recovery_s3_endpoint` | string | `""` | `ES4_RECOVERY_S3_ENDPOINT` |
 | `state_path` | string（オンディスク SQLite パス） | `""` | `ES4_STATE_PATH` |
-| `state_backend` | string（`""` \| `memory` \| `sqlite` \| `redis` \| `valkey`） | `""` | `ES4_STATE_BACKEND` |
+| `state_backend` | string（`""` \| `memory` \| `sqlite` \| `redis` \| `valkey` \| `firestore`） | `""` | `ES4_STATE_BACKEND` |
 | `state_redis_url` | string（`state_backend=redis|valkey` 時必須） | `""` | `ES4_STATE_REDIS_URL` |
 | `state_redis_key_prefix` | string（任意。Redis HASH 名・E2E 隔離） | `""` | `ES4_STATE_REDIS_KEY_PREFIX` |
+| `state_firestore_project_id` | string（`state_backend=firestore` 時必須） | `""` | `ES4_STATE_FIRESTORE_PROJECT_ID` |
+| `state_firestore_database_id` | string | `""`（Effective で `(default)`） | `ES4_STATE_FIRESTORE_DATABASE_ID` |
+| `state_firestore_collection` | string（`state_backend=firestore` 時必須） | `""` | `ES4_STATE_FIRESTORE_COLLECTION` |
 
 ## 振る舞い
 
@@ -35,7 +38,7 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 - 前提: Options が正本。設定ファイルは Options を補う入力。
 - 手順: `Defaults` →（任意）YAML ファイル →（任意）env overlay
 - 空の env 値は未設定としてスキップする（下位レイヤの値をクリアしない）
-- 例外: ファイル欠落（パス指定時）／不正 YAML／不正 duration・bool／不正 `recovery_backend`／負の `recovery_ttl` はエラー
+- 例外: ファイル欠落（パス指定時）／不正 YAML／不正 duration・bool／不正 `recovery_backend`／不正 `state_backend`／負の `recovery_ttl` はエラー
 - `Load` / `FromFile` は組み立て後に `Validate()` する
 
 ### 設定ファイル
@@ -53,7 +56,7 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 ### memory_only と Recovery / state_path / state_backend
 
 - 前提: `memory_only` が `true`
-- 手順: Recovery 関連設定（`recovery_*`・`snapshot_interval`・`restore_on_startup`）、`state_path`、および **`state_backend`／`state_redis_*`** は**無視して続行**する。設定エラーにはしない（必須キー検査もスキップ）
+- 手順: Recovery 関連設定（`recovery_*`・`snapshot_interval`・`restore_on_startup`）、`state_path`、および **`state_backend`／`state_redis_*`／`state_firestore_*`** は**無視して続行**する。設定エラーにはしない（必須キー検査もスキップ）
 - 下流の Snapshot / Recovery / Open は `Effective()` の値を消費する（`Effective()` は上記をクリアする）
 
 ### recovery_backend
@@ -72,18 +75,22 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 
 ### state_path
 
-- オンディスク SQLite State のパス。非空かつ `memory_only` false で、`state_backend` が redis/valkey/memory でないとき Open は SQLite Backend を選ぶ
+- オンディスク SQLite State のパス。非空かつ `memory_only` false で、`state_backend` が redis/valkey/firestore/memory でないとき Open は SQLite Backend を選ぶ
 - 空なら Memory（互換）。`memory_only` true なら無視
 
-### state_backend / state_redis_*
+### state_backend / state_redis_* / state_firestore_*
 
-- `state_backend`: `""`（既存互換: path／memory_only で決定）\| `memory` \| `sqlite` \| `redis` \| `valkey`
+- `state_backend`: `""`（既存互換: path／memory_only で決定）\| `memory` \| `sqlite` \| `redis` \| `valkey` \| `firestore`
 - `valkey` は **エイリアス**（実装は redis と同じアダプタ）
 - `state_backend=redis|valkey` → `state_redis_url` 必須（欠落は Validate／Open エラー）
+- `state_backend=firestore` → `state_firestore_project_id` と `state_firestore_collection` 必須
+- `state_firestore_collection` に `/` を含む・`.`／`..` のみ → Validate エラー
+- `state_firestore_database_id` 省略時、Effective 後は `(default)`
+- 認証・エンドポイントは Options 外: Emulator は `FIRESTORE_EMULATOR_HOST`、本番は SDK 既定（ADC 等）
 - `state_backend=sqlite` かつ `state_path` 空 → Validate エラー
 - `state_backend=memory` → Memory（`state_path` 無視可）
 - `state_redis_key_prefix` は任意。空なら Redis HASH 名は `es4:state`
-- Open 選択優先（Effective 後）: 注入 → `memory_only` → `redis|valkey` → `state_path`／sqlite → Memory
+- Open 選択優先（Effective 後）: 注入 → `memory_only` → `redis|valkey` → `firestore` → `memory` → `state_path`／sqlite → Memory
 
 ## 関連
 
@@ -93,6 +100,8 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 - Recovery: [`docs/specs/recovery/`](../recovery/)
 - Tx: [`docs/specs/tx/`](../tx/)
 - Server env: [`docs/specs/es4-server/`](../es4-server/)
+- v0.8.0 Redis／Valkey plan: [`docs/plans/v0.8.0/redis-valkey-state.md`](../../plans/v0.8.0/redis-valkey-state.md)
+- v0.8.0 Firestore plan: [`docs/plans/v0.8.0/firestore-state.md`](../../plans/v0.8.0/firestore-state.md)
 
 ----
 

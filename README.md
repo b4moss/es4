@@ -28,17 +28,17 @@ Current monorepo line: **Git tag `v0.7.3`** (Go library module path still `githu
 
 | Layer | Choices |
 |-------|---------|
-| State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) |
+| State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) · Firestore (`state_backend=firestore`) |
 | Recovery | `file` · `libsql` (local) · `object` (S3-compatible) |
 | Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` · Tx: `BeginTx` → Commit/Rollback |
 | Server | HTTP Es4 Server + Docker image workflows |
-| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State (`workflow_dispatch`) |
+| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore **not** in `layer=all`) |
 
 **Out of scope / not yet:**
 
 - Node.js / TypeScript port (`packages/node` is a stub)
 - Remote Turso (`libsql://`) in product E2E
-- Firestore State adapter (v0.8.0 follow-up PR)
+- Production GCP-required Firestore E2E (Emulator only)
 - Public `SnapshotNow` API (explicit flush exists only as a **test helper** in `export_test.go`)
 
 ## Install
@@ -204,6 +204,18 @@ es4.Open(ctx, options.Options{
 })
 ```
 
+**Firestore State** (Emulator: set `FIRESTORE_EMULATOR_HOST`)
+
+```go
+es4.Open(ctx, options.Options{
+    StateBackend:               options.StateBackendFirestore,
+    StateFirestoreProjectID:    "demo-es4",
+    StateFirestoreCollection:   "es4-state",
+    // StateFirestoreDatabaseID: "", // Effective default: (default)
+    SnapshotInterval:           0,
+})
+```
+
 Optional: `recovery_ttl` (Go duration; `0` keeps only the latest generation), `recovery_libsql_auth_token` for authenticated DSN forms.
 
 ### Product E2E — run the workflow layers
@@ -212,13 +224,14 @@ E2E is **manual only** (`.github/workflows/e2e.yml`, `workflow_dispatch`). Input
 
 | `layer` | What runs | Extra service |
 |---------|-----------|---------------|
-| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | RustFS required; Redis/Valkey skip unless URLs set |
+| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | RustFS required; Redis/Valkey/Firestore skip unless env set |
 | `object` | `TestE2E_ObjectRecovery_*` | RustFS |
 | `file` | `TestE2E_FileSQLite_*` | No |
 | `memory` | `TestE2E_Memory_*` | No |
 | `libsql` | `TestE2E_LibSQL*` (File C1–C5 + Memory C2/C4/C5) | No |
-| `redis` | `TestE2E_RedisState_*` | Compose `redis` |
-| `valkey` | `TestE2E_ValkeyState_*` | Compose `valkey` |
+| `redis` | `TestE2E_RedisState_*` | Compose `redis` (**not** in `all`) |
+| `valkey` | `TestE2E_ValkeyState_*` | Compose `valkey` (**not** in `all`) |
+| `firestore` | `TestE2E_FirestoreState_*` | Compose `firestore` (**not** in `all`) |
 
 Local commands (from repo root / `packages/go`):
 
@@ -251,6 +264,12 @@ go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1 -timeout 10m
 docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
 export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
 go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1 -timeout 10m
+
+# Firestore Emulator (not part of layer=all)
+docker compose -f docker/e2e/docker-compose.yml up -d --wait firestore
+export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+export ES4_E2E_FIRESTORE_PROJECT_ID=demo-es4
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_FirestoreState_' -count=1 -timeout 10m
 ```
 
 Compose defaults and cleanup: [`docker/e2e/README.md`](./docker/e2e/README.md). Behavior catalog: [`docs/tests/e2e/e2e-spec.md`](./docs/tests/e2e/e2e-spec.md).
@@ -265,6 +284,7 @@ Harness files (all `//go:build e2e`):
 | libSQL File / Memory | `libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go` |
 | Redis State | `redis_state_e2e_test.go` |
 | Valkey State | `valkey_state_e2e_test.go` |
+| Firestore State | `firestore_state_e2e_test.go` |
 
 ### Writing / running libSQL E2E
 

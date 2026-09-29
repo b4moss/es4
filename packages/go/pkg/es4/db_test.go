@@ -504,6 +504,72 @@ func TestOpen_BackendSelection(t *testing.T) {
 			t.Fatal("want validate error for missing state_redis_url")
 		}
 	})
+
+	t.Run("firestore_incomplete_validate", func(t *testing.T) {
+		t.Parallel()
+		_, err := es4.Open(ctx, options.Options{
+			StateBackend:     options.StateBackendFirestore,
+			SnapshotInterval: 0,
+			RestoreOnStartup: false,
+		})
+		if err == nil {
+			t.Fatal("want Validate error for incomplete firestore options")
+		}
+	})
+
+	t.Run("memory_only_ignores_firestore", func(t *testing.T) {
+		t.Parallel()
+		db, err := es4.Open(ctx, options.Options{
+			MemoryOnly:               true,
+			StateBackend:             options.StateBackendFirestore,
+			StateFirestoreProjectID:  "demo",
+			StateFirestoreCollection: "c",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Memory); !ok {
+			t.Fatalf("want Memory, got %T", db.StateForTest())
+		}
+	})
+
+	t.Run("firestore_emulator", func(t *testing.T) {
+		t.Parallel()
+		if os.Getenv("FIRESTORE_EMULATOR_HOST") == "" {
+			t.Skip("FIRESTORE_EMULATOR_HOST unset")
+		}
+		col := "open_" + filepath.Base(t.TempDir())
+		db, err := es4.Open(ctx, options.Options{
+			StateBackend:             options.StateBackendFirestore,
+			StateFirestoreProjectID:  "demo-es4",
+			StateFirestoreCollection: col,
+			SnapshotInterval:         0,
+			RestoreOnStartup:         false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Firestore); !ok {
+			t.Fatalf("want Firestore, got %T", db.StateForTest())
+		}
+		db2, err := es4.Open(ctx, options.Options{
+			StateBackend:             options.StateBackendFirestore,
+			StateFirestoreProjectID:  "demo-es4",
+			StateFirestoreCollection: col + "_2",
+			StatePath:                filepath.Join(t.TempDir(), "ignored.db"),
+			SnapshotInterval:         0,
+			RestoreOnStartup:         false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db2.Close() })
+		if _, ok := db2.StateForTest().(*state.Firestore); !ok {
+			t.Fatalf("want Firestore over state_path, got %T", db2.StateForTest())
+		}
+	})
 }
 
 func TestOpen_SQLite_RestoreOnStartup(t *testing.T) {

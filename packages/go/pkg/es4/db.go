@@ -64,11 +64,12 @@ type OpenConfig struct {
 // Open builds a DB from Options. Consumes opts.Effective().
 //
 // Backend selection (when State is not injected via OpenWith):
-//  1. memory_only → Memory (state_path / state_backend / redis ignored)
+//  1. memory_only → Memory (state_path / state_backend / redis / Firestore ignored)
 //  2. state_backend=redis|valkey → Redis adapter (state_redis_url required)
-//  3. state_backend=memory → Memory
-//  4. state_path non-empty (or state_backend=sqlite) → on-disk SQLite
-//  5. empty state_path → Memory (compat)
+//  3. state_backend=firestore → Firestore (project_id + collection required)
+//  4. state_backend=memory → Memory
+//  5. state_path non-empty (or state_backend=sqlite) → on-disk SQLite
+//  6. empty state_path → Memory (compat)
 //
 // Recovery selection (when Recovery is not injected via OpenWith):
 //   - memory_only → no Recovery (settings ignored)
@@ -174,6 +175,17 @@ func openDefaultState(eff options.Options) (state.Store, error) {
 		st, err := state.OpenRedis(context.Background(), eff.StateRedisURL, eff.StateRedisKeyPrefix)
 		if err != nil {
 			return nil, fmt.Errorf("es4: open redis state: %w", err)
+		}
+		return st, nil
+	}
+	if eff.IsFirestoreStateBackend() {
+		st, err := state.OpenFirestore(context.Background(),
+			eff.StateFirestoreProjectID,
+			eff.StateFirestoreDatabaseID,
+			eff.StateFirestoreCollection,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("es4: open firestore state: %w", err)
 		}
 		return st, nil
 	}

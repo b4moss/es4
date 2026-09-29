@@ -12,8 +12,9 @@
 - libSQL: `packages/go/pkg/es4/libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go`
 - Redis State: `packages/go/pkg/es4/redis_state_e2e_test.go`
 - Valkey State: `packages/go/pkg/es4/valkey_state_e2e_test.go`
-- `cd packages/go && go test -tags=e2e ./... -count=1`（S3 は RustFS 起動下。未起動時は Object のみ skip。libSQL は RustFS 不要。redis／valkey は URL 未設定なら skip）
-- CI: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql|redis|valkey）
+- Firestore State: `packages/go/pkg/es4/firestore_state_e2e_test.go`（`FIRESTORE_EMULATOR_HOST` 必須。`layer=all` 非対象）
+- `cd packages/go && go test -tags=e2e ./... -count=1`（S3 は RustFS 起動下。未起動時は Object のみ skip。libSQL は RustFS 不要。redis／valkey は URL 未設定なら skip。Firestore は HOST 未設定時 skip）
+- CI: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql|redis|valkey|firestore）
 
 採用マトリクス: [`e2e-spec.md`](./e2e-spec.md) §0.2。
 
@@ -493,16 +494,27 @@
 
 ----
 
+# G. Firestore State 層（§5F · §Fs · C1–C5）
+
+### 前提
+
+- `FIRESTORE_EMULATOR_HOST`、`ES4_E2E_FIRESTORE_PROJECT_ID`、`state_backend=firestore`、Compose `firestore`
+- ケースごと一意 `state_firestore_collection`。Clear は当該 collection のみ
+- **`layer=all` 非対象**（`layer=firestore` 専用）
+- テスト: `TestE2E_FirestoreState_*`（C1–C5。期待は e2e-spec §Fs.1–§Fs.5）
+
+----
+
 ## 非対象
 
 `e2e-spec.md` §6 および §5.6／C6 のとおり:
 
 - TTL／世代剪定の E2E（任意）
 - リモート Turso／`libsql://` クラウド、Es4 Server HTTP E2E
-- 本番 AWS S3／GCS／ElastiCache／Memorystore、Firestore（次 PR）
+- 本番 AWS S3／GCS／ElastiCache／Memorystore／GCP Firestore（Compose／Emulator のみ）
 - push／pull_request 自動 CI（E2E は手動 `workflow_dispatch` のみ）
 - インメモリ／libSQL Memory の C1／C3（再起動復元はユースケース外）
-- `layer=all` への redis／valkey 混入
+- `layer=all` への redis／valkey／firestore 混入
 
 ----
 
@@ -515,6 +527,7 @@
 - インメモリ: §C.2・§C.4・§C.5 が PASS（RustFS 不要）
 - libSQL: §D.F.1–§D.F.5 および §D.M.2・§D.M.4・§D.M.5 が PASS（RustFS 不要）
 - Redis／Valkey State: §E.1–§E.5／§F（C1–C5）が各 Compose 下で PASS
+- Firestore State: §G（§Fs.1–§Fs.5 · C1–C5）が Emulator 下で PASS（`layer=all` 非対象）
 - 期待は各層の e2e-spec 節と一致（新規 FAIL 基準を設けない）
 
 ----

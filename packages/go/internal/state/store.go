@@ -1,8 +1,8 @@
 // Package state defines the State Store adapter contract, in-memory,
-// on-disk SQLite, and Redis-protocol (Redis / Valkey) implementations,
-// and the Tx surface (separate from Store).
+// on-disk SQLite, Redis-protocol (Redis / Valkey), and Firestore
+// implementations, and the Tx surface (separate from Store).
 //
-// Adapter boundary (Phase 5 / SemVer v0.6.0; Redis/Valkey in v0.8.0):
+// Adapter boundary (Phase 5 / SemVer v0.6.0; Redis/Valkey + Firestore in v0.8.0):
 //   - All backends share this Store (+ Tx) surface. Public pkg/es4 contracts
 //     must not grow backend-specific APIs.
 //   - Export returns a deep copy (caller mutations of the map or RawMessage
@@ -11,9 +11,8 @@
 //   - Replace is atomic: after success only the new entry set is observable;
 //     concurrent readers may block on locks but must not see a torn mix of
 //     old and new keys.
-//   - Internal optimizations of Memory / SQLite / Redis are allowed only when
-//     they preserve these shared semantics. Firestore and other backends
-//     remain Unscheduled (no Options keys, no client dependency in this tree).
+//   - Internal optimizations of Memory / SQLite / Redis / Firestore are
+//     allowed only when they preserve these shared semantics.
 package state
 
 import (

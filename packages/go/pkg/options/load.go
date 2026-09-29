@@ -117,6 +117,15 @@ func ApplyEnv(opts Options, getenv func(string) string) (Options, error) {
 	if v := getenv(EnvPrefix + "STATE_REDIS_KEY_PREFIX"); v != "" {
 		overlay.stateRedisKeyPrefix = &v
 	}
+	if v := getenv(EnvPrefix + "STATE_FIRESTORE_PROJECT_ID"); v != "" {
+		overlay.stateFirestoreProjectID = &v
+	}
+	if v := getenv(EnvPrefix + "STATE_FIRESTORE_DATABASE_ID"); v != "" {
+		overlay.stateFirestoreDatabaseID = &v
+	}
+	if v := getenv(EnvPrefix + "STATE_FIRESTORE_COLLECTION"); v != "" {
+		overlay.stateFirestoreCollection = &v
+	}
 	return merge(opts, overlay), nil
 }
 
@@ -138,10 +147,13 @@ type partial struct {
 	recoveryS3Prefix        *string
 	recoveryS3Region        *string
 	recoveryS3Endpoint      *string
-	statePath               *string
-	stateBackend            *string
-	stateRedisURL           *string
-	stateRedisKeyPrefix     *string
+	statePath                 *string
+	stateBackend              *string
+	stateRedisURL             *string
+	stateRedisKeyPrefix       *string
+	stateFirestoreProjectID    *string
+	stateFirestoreDatabaseID   *string
+	stateFirestoreCollection   *string
 }
 
 func loadFile(path string) (partial, error) {
@@ -268,6 +280,24 @@ func loadFile(path string) (partial, error) {
 				return partial{}, fmt.Errorf("options: state_redis_key_prefix: %w", err)
 			}
 			out.stateRedisKeyPrefix = &s
+		case "state_firestore_project_id":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_firestore_project_id: %w", err)
+			}
+			out.stateFirestoreProjectID = &s
+		case "state_firestore_database_id":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_firestore_database_id: %w", err)
+			}
+			out.stateFirestoreDatabaseID = &s
+		case "state_firestore_collection":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_firestore_collection: %w", err)
+			}
+			out.stateFirestoreCollection = &s
 		}
 	}
 	return out, nil
@@ -322,6 +352,15 @@ func merge(base Options, over partial) Options {
 	}
 	if over.stateRedisKeyPrefix != nil {
 		out.StateRedisKeyPrefix = *over.stateRedisKeyPrefix
+	}
+	if over.stateFirestoreProjectID != nil {
+		out.StateFirestoreProjectID = *over.stateFirestoreProjectID
+	}
+	if over.stateFirestoreDatabaseID != nil {
+		out.StateFirestoreDatabaseID = *over.stateFirestoreDatabaseID
+	}
+	if over.stateFirestoreCollection != nil {
+		out.StateFirestoreCollection = *over.stateFirestoreCollection
 	}
 	return out
 }
