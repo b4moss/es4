@@ -7,14 +7,20 @@ TypeScript port of Es4 Go **v0.8.0** contracts. Options keys stay **snake_case**
 - Node.js **20+**
 - TypeScript strict (built with `tsc`)
 
-## Install (workspace)
+## Install
+
+```bash
+npm install @b4moss/es4
+```
+
+From a clone (development):
 
 ```bash
 cd packages/node
-npm install
+npm ci
 ```
 
-Package is **private** (not published to npm in v0.9.0).
+`better-sqlite3` is an **optionalDependency** (native). It is required at runtime for SQLite State and local libSQL Recovery; Memory / Redis／Valkey / Firestore do not need it. If the optional install fails on your platform, install a compatible `better-sqlite3` explicitly when using those backends.
 
 ## Quick start
 

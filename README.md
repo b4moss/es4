@@ -13,7 +13,7 @@ Embedded server-side state store with pluggable Recovery — for when you want d
 
 Product knowledge lives under **[`docs/`](./docs/)** (OKF). This root README is the canonical English entry for install and usage; deeper specs and plans stay in `docs/`.
 
-Current monorepo line: **Git tag `v0.8.0`** (Go library). Node.js／TypeScript port is **`packages/node`** (v0.9.0; private workspace package, not npm-published yet).
+Current monorepo line: **Git tag `v0.8.0`** (Go library). Node.js／TypeScript port is **`packages/node`** (`@b4moss/es4` **v0.9.0** on npm).
 
 ## Purpose
 
@@ -45,7 +45,6 @@ Current monorepo line: **Git tag `v0.8.0`** (Go library). Node.js／TypeScript p
 
 **Out of scope / not yet:**
 
-- npm publish of `@b4moss/es4` (workspace-private until instructed)
 - Remote Turso (`libsql://`) in product E2E
 - Production GCP-required Firestore E2E (Emulator only)
 - Public `SnapshotNow` API (explicit flush exists only as a **test helper**)
@@ -86,7 +85,13 @@ Server options load from `ES4_*` env (same snake_case keys as library Options). 
 
 ### Node.js / TypeScript (`packages/node`)
 
-**Requirements:** Node.js **20+**. Workspace-private package `@b4moss/es4` (see [`packages/node/README.md`](./packages/node/README.md)).
+**Requirements:** Node.js **20+**. Package: [`@b4moss/es4`](https://www.npmjs.com/package/@b4moss/es4) (see [`packages/node/README.md`](./packages/node/README.md)).
+
+```bash
+npm install @b4moss/es4
+```
+
+From a clone:
 
 ```bash
 cd packages/node

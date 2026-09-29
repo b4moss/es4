@@ -1,0 +1,112 @@
+name: Publish npm
+
+# Publishes @b4moss/es4 from packages/node.
+#
+# Ongoing path (Trusted Publisher / OIDC):
+#   Push to `release` → npm publish --access public --provenance
+#   No NODE_AUTH_TOKEN. Configure npm Trusted Publisher for:
+#     package @b4moss/es4 → GitHub org b4moss, repo es4, workflow publish-npm.yml
+#
+# One-shot first create (token):
+#   workflow_dispatch with first_publish=true uses secrets.NPM_TOKEN.
+#   Only for creating the package the first time while Trusted Publisher cannot
+#   bind to a missing package. Do not use casually after the package exists.
+#
+# Gate: packages/node version X.Y.Z must match tag vX.Y.Z on HEAD ancestry
+# (see .github/scripts/should-publish-node.sh). Skip if already on the registry.
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+    inputs:
+      first_publish:
+        description: "One-shot first package create via NPM_TOKEN (only when @b4moss/es4 does not exist on npm yet)"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-npm-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: publish @b4moss/es4
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Push to release → OIDC path.
+    # workflow_dispatch → only when first_publish is explicitly requested.
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.first_publish == true)
+    defaults:
+      run:
+        working-directory: packages/node
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Decide whether to publish
+        id: decide
+        working-directory: ${{ github.workspace }}
+        run: bash .github/scripts/should-publish-node.sh
+
+      - name: Fail if first_publish but package already exists
+        if: >
+          github.event_name == 'workflow_dispatch' &&
+          inputs.first_publish == true &&
+          steps.decide.outputs.skip == 'true'
+        env:
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "first_publish requested but publish was skipped."
+          echo "If @b4moss/es4@${VERSION:-?} already exists, use Trusted Publisher on the release branch instead of NPM_TOKEN."
+          echo "Otherwise check that tag v${VERSION} exists on HEAD ancestry (see should-publish-node.sh)."
+          exit 1
+
+      - name: Publish to npm (Trusted Publisher / OIDC)
+        if: >
+          steps.decide.outputs.skip != 'true' &&
+          github.event_name == 'push'
+        run: npm publish --access public --provenance
+
+      - name: Publish to npm (first create via NPM_TOKEN)
+        if: >
+          steps.decide.outputs.skip != 'true' &&
+          github.event_name == 'workflow_dispatch' &&
+          inputs.first_publish == true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN secret is missing or empty."
+            echo "Set org/repo secret NPM_TOKEN for the one-shot first create only."
+            exit 1
+          fi
+          echo "Publishing first package create with NPM_TOKEN (provenance enabled)."
+          echo "After this succeeds, configure Trusted Publisher and use push-to-release only."
+          npm publish --access public --provenance
