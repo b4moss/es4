@@ -1,4 +1,4 @@
-// Package es4 is the public library entry for Phase 1 / Phase 2.
+// Package es4 is the public library entry for Phase 1–3.
 //
 // The public surface is the State API (SET / GET / DELETE / EXISTS / CLEAR)
 // and the Tx API (BeginTx). Snapshot and Recovery are internal and driven by
@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/b4moss/es4/packages/go/internal/recovery"
@@ -49,7 +50,7 @@ type DB struct {
 type OpenConfig struct {
 	Options  options.Options
 	State    state.Store    // default: selected from Effective Options
-	Recovery recovery.Store // default: file at Effective.RecoveryPath when set
+	Recovery recovery.Store // default: built from Effective recovery_* Options
 	// SkipAsyncRestore, when true, runs startup restore synchronously inside Open
 	// (still does not gate the State API afterward). Used by tests that need
 	// deterministic restore completion without waiting.
@@ -65,8 +66,12 @@ type OpenConfig struct {
 //   - state_path non-empty → on-disk SQLite
 //   - empty state_path → Memory (compat)
 //
+// Recovery selection (when Recovery is not injected via OpenWith):
+//   - memory_only → no Recovery (settings ignored)
+//   - recovery_backend file|libsql|object (empty + recovery_path → file)
+//
 // Lifecycle:
-//   - restore_on_startup (Effective): load recovery file if present/readable;
+//   - restore_on_startup (Effective): load recovery if present/readable;
 //     missing/unreadable → empty State and continue (not fatal). Restore runs
 //     asynchronously; State API is accepted before it completes.
 //   - snapshot_interval (Effective) > 0: start periodic snapshots; stop on Close.
@@ -76,7 +81,7 @@ func Open(ctx context.Context, opts options.Options) (*DB, error) {
 }
 
 // OpenWith opens with explicit adapter injection (swappable State / Recovery).
-// Injected State takes priority over Options-based backend selection.
+// Injected State / Recovery take priority over Options-based selection.
 func OpenWith(ctx context.Context, cfg OpenConfig) (*DB, error) {
 	return open(ctx, cfg)
 }
@@ -86,6 +91,9 @@ func open(ctx context.Context, cfg OpenConfig) (*DB, error) {
 		return nil, err
 	}
 	eff := cfg.Options.Effective()
+	if err := eff.Validate(); err != nil {
+		return nil, err
+	}
 
 	st := cfg.State
 	if st == nil {
@@ -98,9 +106,15 @@ func open(ctx context.Context, cfg OpenConfig) (*DB, error) {
 
 	var rec recovery.Store
 	if cfg.Recovery != nil {
+		// OpenWith injection wins over Options-based Recovery selection.
 		rec = cfg.Recovery
-	} else if !eff.MemoryOnly && eff.RecoveryPath != "" {
-		rec = recovery.NewFile(eff.RecoveryPath)
+	} else if !eff.MemoryOnly {
+		var err error
+		rec, err = recovery.OpenFromOptions(ctx, eff)
+		if err != nil {
+			_ = st.Close()
+			return nil, err
+		}
 	}
 
 	// Persistence writes only when recovery is configured and not memory_only.
@@ -236,6 +250,9 @@ func (db *DB) Close() error {
 
 	db.snap.Stop()
 	db.restoreN.Wait()
+	if c, ok := db.recovery.(io.Closer); ok && c != nil {
+		_ = c.Close()
+	}
 	return db.state.Close()
 }
 

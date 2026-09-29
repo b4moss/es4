@@ -27,6 +27,18 @@ func TestDefaults(t *testing.T) {
 	if got.StatePath != "" {
 		t.Fatalf("state_path: got %q want empty", got.StatePath)
 	}
+	if got.RecoveryBackend != "" {
+		t.Fatalf("recovery_backend: got %q want empty", got.RecoveryBackend)
+	}
+	if got.RecoveryTTL != 0 {
+		t.Fatalf("recovery_ttl: got %v want 0", got.RecoveryTTL)
+	}
+	if got.RecoveryLibSQLURL != "" || got.RecoveryLibSQLAuthToken != "" {
+		t.Fatal("libsql keys want empty")
+	}
+	if got.RecoveryS3Bucket != "" || got.RecoveryS3Prefix != "" || got.RecoveryS3Region != "" || got.RecoveryS3Endpoint != "" {
+		t.Fatal("s3 keys want empty")
+	}
 }
 
 func TestLoad_DefaultsOnly(t *testing.T) {
@@ -297,11 +309,19 @@ func TestLoad_BoolNotLowercaseTrueFalse(t *testing.T) {
 func TestEffective_MemoryOnlyOn(t *testing.T) {
 	t.Parallel()
 	raw := options.Options{
-		SnapshotInterval: 15 * time.Second,
-		RestoreOnStartup: true,
-		MemoryOnly:       true,
-		RecoveryPath:     "/should/ignore",
-		StatePath:        "/should/ignore-state",
+		SnapshotInterval:        15 * time.Second,
+		RestoreOnStartup:        true,
+		MemoryOnly:              true,
+		RecoveryPath:            "/should/ignore",
+		RecoveryBackend:         "libsql",
+		RecoveryTTL:             time.Hour,
+		RecoveryLibSQLURL:       "libsql://x",
+		RecoveryLibSQLAuthToken: "tok",
+		RecoveryS3Bucket:        "b",
+		RecoveryS3Prefix:        "p",
+		RecoveryS3Region:        "r",
+		RecoveryS3Endpoint:      "http://e",
+		StatePath:               "/should/ignore-state",
 	}
 	eff := raw.Effective()
 	if eff.SnapshotInterval != 0 {
@@ -312,6 +332,12 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 	}
 	if eff.RecoveryPath != "" {
 		t.Fatalf("recovery_path should be ignored, got %q", eff.RecoveryPath)
+	}
+	if eff.RecoveryBackend != "" || eff.RecoveryTTL != 0 {
+		t.Fatalf("recovery backend/ttl should be cleared: %#v", eff)
+	}
+	if eff.RecoveryLibSQLURL != "" || eff.RecoveryS3Bucket != "" {
+		t.Fatal("libsql/s3 keys should be cleared")
 	}
 	if eff.StatePath != "" {
 		t.Fatalf("state_path should be ignored, got %q", eff.StatePath)
@@ -351,5 +377,133 @@ func TestEnvName(t *testing.T) {
 	t.Parallel()
 	if got := options.EnvName("snapshot_interval"); got != "ES4_SNAPSHOT_INTERVAL" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestLoad_RecoveryExtensions(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rec.yaml")
+	body := `
+recovery_backend: libsql
+recovery_ttl: 24h
+recovery_libsql_url: libsql://db.example
+recovery_libsql_auth_token: secret
+recovery_s3_bucket: ignored-when-libsql
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := options.FromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RecoveryBackend != "libsql" || got.RecoveryTTL != 24*time.Hour {
+		t.Fatalf("got backend=%q ttl=%v", got.RecoveryBackend, got.RecoveryTTL)
+	}
+	if got.RecoveryLibSQLURL != "libsql://db.example" || got.RecoveryLibSQLAuthToken != "secret" {
+		t.Fatalf("libsql fields: %#v", got)
+	}
+}
+
+func TestLoad_RecoveryObjectKeys(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "obj.yaml")
+	if err := os.WriteFile(path, []byte(`
+recovery_backend: object
+recovery_s3_bucket: my-bkt
+recovery_s3_prefix: pref/
+recovery_s3_region: us-east-1
+recovery_s3_endpoint: https://storage.googleapis.com
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := options.FromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RecoveryBackend != "object" || got.RecoveryS3Bucket != "my-bkt" {
+		t.Fatalf("%#v", got)
+	}
+	if got.RecoveryS3Prefix != "pref/" || got.RecoveryS3Region != "us-east-1" || got.RecoveryS3Endpoint != "https://storage.googleapis.com" {
+		t.Fatalf("%#v", got)
+	}
+}
+
+func TestLoad_EmptyLibSQLAuthTokenSkipped(t *testing.T) {
+	t.Parallel()
+	base := options.Defaults()
+	base.RecoveryBackend = "libsql"
+	base.RecoveryLibSQLURL = "file:/tmp/x.db"
+	base.RecoveryLibSQLAuthToken = "keep"
+	got, err := options.ApplyEnv(base, func(k string) string {
+		if k == "ES4_RECOVERY_LIBSQL_AUTH_TOKEN" {
+			return ""
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RecoveryLibSQLAuthToken != "keep" {
+		t.Fatalf("empty env must not clear token, got %q", got.RecoveryLibSQLAuthToken)
+	}
+}
+
+func TestLoad_InvalidRecoveryBackend(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "bad.yaml")
+	if err := os.WriteFile(path, []byte("recovery_backend: litestream\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := options.FromFile(path); err == nil {
+		t.Fatal("want error for invalid backend")
+	}
+}
+
+func TestLoad_NegativeRecoveryTTL(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "ttl.yaml")
+	if err := os.WriteFile(path, []byte("recovery_ttl: -5s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := options.FromFile(path); err == nil {
+		t.Fatal("want error for negative ttl")
+	}
+}
+
+func TestValidate_BackendRequiredKeys(t *testing.T) {
+	t.Parallel()
+	cases := []options.Options{
+		{RecoveryBackend: "file"},
+		{RecoveryBackend: "libsql"},
+		{RecoveryBackend: "object"},
+	}
+	for _, c := range cases {
+		if err := c.Validate(); err == nil {
+			t.Fatalf("want error for %#v", c)
+		}
+	}
+	ok := options.Options{RecoveryPath: "/r"} // empty backend → file
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	// memory_only skips required keys
+	mo := options.Options{MemoryOnly: true, RecoveryBackend: "libsql"}
+	if err := mo.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolvedRecoveryBackend(t *testing.T) {
+	t.Parallel()
+	if (options.Options{}).ResolvedRecoveryBackend() != "" {
+		t.Fatal("want empty")
+	}
+	if (options.Options{RecoveryPath: "/x"}).ResolvedRecoveryBackend() != "file" {
+		t.Fatal("want file from path")
+	}
+	if (options.Options{RecoveryBackend: "object", RecoveryPath: "/x"}).ResolvedRecoveryBackend() != "object" {
+		t.Fatal("explicit backend wins")
 	}
 }

@@ -22,7 +22,14 @@ func Load(configPath string, getenv func(string) string) (Options, error) {
 		}
 		opts = merge(opts, fileOpts)
 	}
-	return ApplyEnv(opts, getenv)
+	opts, err := ApplyEnv(opts, getenv)
+	if err != nil {
+		return Options{}, err
+	}
+	if err := opts.Validate(); err != nil {
+		return Options{}, err
+	}
+	return opts, nil
 }
 
 // FromFile loads a YAML config file and merges it onto Defaults (no env overlay).
@@ -31,7 +38,11 @@ func FromFile(path string) (Options, error) {
 	if err != nil {
 		return Options{}, err
 	}
-	return merge(Defaults(), fileOpts), nil
+	opts := merge(Defaults(), fileOpts)
+	if err := opts.Validate(); err != nil {
+		return Options{}, err
+	}
+	return opts, nil
 }
 
 // ApplyEnv overlays ES4_* environment variables onto opts.
@@ -66,6 +77,34 @@ func ApplyEnv(opts Options, getenv func(string) string) (Options, error) {
 	if v := getenv(EnvPrefix + "RECOVERY_PATH"); v != "" {
 		overlay.recoveryPath = &v
 	}
+	if v := getenv(EnvPrefix + "RECOVERY_BACKEND"); v != "" {
+		overlay.recoveryBackend = &v
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_TTL"); v != "" {
+		d, err := parseDuration(v)
+		if err != nil {
+			return Options{}, fmt.Errorf("options: %sRECOVERY_TTL: %w", EnvPrefix, err)
+		}
+		overlay.recoveryTTL = &d
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_LIBSQL_URL"); v != "" {
+		overlay.recoveryLibSQLURL = &v
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_LIBSQL_AUTH_TOKEN"); v != "" {
+		overlay.recoveryLibSQLAuthToken = &v
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_S3_BUCKET"); v != "" {
+		overlay.recoveryS3Bucket = &v
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_S3_PREFIX"); v != "" {
+		overlay.recoveryS3Prefix = &v
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_S3_REGION"); v != "" {
+		overlay.recoveryS3Region = &v
+	}
+	if v := getenv(EnvPrefix + "RECOVERY_S3_ENDPOINT"); v != "" {
+		overlay.recoveryS3Endpoint = &v
+	}
 	if v := getenv(EnvPrefix + "STATE_PATH"); v != "" {
 		overlay.statePath = &v
 	}
@@ -78,11 +117,19 @@ func EnvName(snakeKey string) string {
 }
 
 type partial struct {
-	snapshotInterval *time.Duration
-	restoreOnStartup *bool
-	memoryOnly       *bool
-	recoveryPath     *string
-	statePath        *string
+	snapshotInterval        *time.Duration
+	restoreOnStartup        *bool
+	memoryOnly              *bool
+	recoveryPath            *string
+	recoveryBackend         *string
+	recoveryTTL             *time.Duration
+	recoveryLibSQLURL       *string
+	recoveryLibSQLAuthToken *string
+	recoveryS3Bucket        *string
+	recoveryS3Prefix        *string
+	recoveryS3Region        *string
+	recoveryS3Endpoint      *string
+	statePath               *string
 }
 
 func loadFile(path string) (partial, error) {
@@ -137,6 +184,54 @@ func loadFile(path string) (partial, error) {
 				return partial{}, fmt.Errorf("options: recovery_path: %w", err)
 			}
 			out.recoveryPath = &s
+		case "recovery_backend":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_backend: %w", err)
+			}
+			out.recoveryBackend = &s
+		case "recovery_ttl":
+			d, err := parseDurationNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_ttl: %w", err)
+			}
+			out.recoveryTTL = &d
+		case "recovery_libsql_url":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_libsql_url: %w", err)
+			}
+			out.recoveryLibSQLURL = &s
+		case "recovery_libsql_auth_token":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_libsql_auth_token: %w", err)
+			}
+			out.recoveryLibSQLAuthToken = &s
+		case "recovery_s3_bucket":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_s3_bucket: %w", err)
+			}
+			out.recoveryS3Bucket = &s
+		case "recovery_s3_prefix":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_s3_prefix: %w", err)
+			}
+			out.recoveryS3Prefix = &s
+		case "recovery_s3_region":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_s3_region: %w", err)
+			}
+			out.recoveryS3Region = &s
+		case "recovery_s3_endpoint":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: recovery_s3_endpoint: %w", err)
+			}
+			out.recoveryS3Endpoint = &s
 		case "state_path":
 			s, err := parseStringNode(valNode)
 			if err != nil {
@@ -161,6 +256,30 @@ func merge(base Options, over partial) Options {
 	}
 	if over.recoveryPath != nil {
 		out.RecoveryPath = *over.recoveryPath
+	}
+	if over.recoveryBackend != nil {
+		out.RecoveryBackend = *over.recoveryBackend
+	}
+	if over.recoveryTTL != nil {
+		out.RecoveryTTL = *over.recoveryTTL
+	}
+	if over.recoveryLibSQLURL != nil {
+		out.RecoveryLibSQLURL = *over.recoveryLibSQLURL
+	}
+	if over.recoveryLibSQLAuthToken != nil {
+		out.RecoveryLibSQLAuthToken = *over.recoveryLibSQLAuthToken
+	}
+	if over.recoveryS3Bucket != nil {
+		out.RecoveryS3Bucket = *over.recoveryS3Bucket
+	}
+	if over.recoveryS3Prefix != nil {
+		out.RecoveryS3Prefix = *over.recoveryS3Prefix
+	}
+	if over.recoveryS3Region != nil {
+		out.RecoveryS3Region = *over.recoveryS3Region
+	}
+	if over.recoveryS3Endpoint != nil {
+		out.RecoveryS3Endpoint = *over.recoveryS3Endpoint
 	}
 	if over.statePath != nil {
 		out.StatePath = *over.statePath
