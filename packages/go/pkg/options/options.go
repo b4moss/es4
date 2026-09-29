@@ -4,8 +4,8 @@
 // with later Server environment variables (prefix ES4_ + SCREAMING_SNAKE).
 //
 // Assemble order: Defaults → optional YAML file → ES4_* env overlay.
-// When MemoryOnly is true, recovery-related settings are ignored (not rejected);
-// downstream Snapshot / Recovery should consume Effective() values.
+// When MemoryOnly is true, recovery-related settings and state_path are ignored (not rejected);
+// downstream Snapshot / Recovery / Open should consume Effective() values.
 package options
 
 import "time"
@@ -26,27 +26,34 @@ type Options struct {
 	RestoreOnStartup bool
 
 	// MemoryOnly is memory_only (default false). When true, recovery-related
-	// settings are ignored — see Effective.
+	// settings and state_path are ignored — see Effective.
 	MemoryOnly bool
 
 	// RecoveryPath is recovery_path (file Recovery location). Empty by default.
-	// Consumed by Recovery once implemented; ignored when MemoryOnly is true.
+	// Consumed by Recovery; ignored when MemoryOnly is true.
 	RecoveryPath string
+
+	// StatePath is state_path (on-disk SQLite State file). Empty by default.
+	// When non-empty and MemoryOnly is false, Open selects the SQLite backend.
+	// Ignored when MemoryOnly is true.
+	StatePath string
 }
 
-// Defaults returns Phase 1 default Options.
+// Defaults returns Phase 1 / Phase 2 default Options.
 func Defaults() Options {
 	return Options{
 		SnapshotInterval: DefaultSnapshotInterval,
 		RestoreOnStartup: true,
 		MemoryOnly:       false,
 		RecoveryPath:     "",
+		StatePath:        "",
 	}
 }
 
-// Effective returns Options with recovery-related fields cleared when
-// MemoryOnly is true. Cleared fields: SnapshotInterval, RestoreOnStartup,
-// RecoveryPath. Does not error if those fields were set while MemoryOnly is true.
+// Effective returns Options with recovery-related fields and state_path cleared
+// when MemoryOnly is true. Cleared fields: SnapshotInterval, RestoreOnStartup,
+// RecoveryPath, StatePath. Does not error if those fields were set while
+// MemoryOnly is true.
 func (o Options) Effective() Options {
 	if !o.MemoryOnly {
 		return o
@@ -56,6 +63,7 @@ func (o Options) Effective() Options {
 		RestoreOnStartup: false,
 		MemoryOnly:       true,
 		RecoveryPath:     "",
+		StatePath:        "",
 	}
 }
 

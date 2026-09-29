@@ -23,7 +23,8 @@ type Envelope struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
-// MemoryPayload is the backend-specific payload for the in-memory State adapter.
+// MemoryPayload is the logical entries payload used by Memory and SQLite
+// State adapters (`{ "entries": { ... } }`). Snapshot does not copy DB files.
 type MemoryPayload struct {
 	Entries map[string]json.RawMessage `json:"entries"`
 }

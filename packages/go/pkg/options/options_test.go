@@ -24,6 +24,9 @@ func TestDefaults(t *testing.T) {
 	if got.RecoveryPath != "" {
 		t.Fatalf("recovery_path: got %q want empty", got.RecoveryPath)
 	}
+	if got.StatePath != "" {
+		t.Fatalf("state_path: got %q want empty", got.StatePath)
+	}
 }
 
 func TestLoad_DefaultsOnly(t *testing.T) {
@@ -47,6 +50,7 @@ snapshot_interval: 10s
 restore_on_startup: false
 memory_only: true
 recovery_path: /tmp/recovery.bin
+state_path: /tmp/state.db
 `
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -66,6 +70,9 @@ recovery_path: /tmp/recovery.bin
 	}
 	if got.RecoveryPath != "/tmp/recovery.bin" {
 		t.Fatalf("recovery_path: got %q", got.RecoveryPath)
+	}
+	if got.StatePath != "/tmp/state.db" {
+		t.Fatalf("state_path: got %q", got.StatePath)
 	}
 }
 
@@ -103,6 +110,7 @@ snapshot_interval: 10s
 restore_on_startup: false
 memory_only: false
 recovery_path: /from/file
+state_path: /state/from/file
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +119,7 @@ recovery_path: /from/file
 		"ES4_RESTORE_ON_STARTUP": "true",
 		"ES4_MEMORY_ONLY":        "true",
 		"ES4_RECOVERY_PATH":      "/from/env",
+		"ES4_STATE_PATH":         "/state/from/env",
 	}
 	got, err := options.Load(path, func(k string) string { return env[k] })
 	if err != nil {
@@ -128,18 +137,22 @@ recovery_path: /from/file
 	if got.RecoveryPath != "/from/env" {
 		t.Fatalf("recovery_path: got %q", got.RecoveryPath)
 	}
+	if got.StatePath != "/state/from/env" {
+		t.Fatalf("state_path: got %q", got.StatePath)
+	}
 }
 
 func TestLoad_EmptyEnvSkipped(t *testing.T) {
 	t.Parallel()
 	base := options.Defaults()
 	base.RecoveryPath = "/keep"
+	base.StatePath = "/keep-state"
 	base.SnapshotInterval = 12 * time.Second
 	got, err := options.ApplyEnv(base, func(k string) string {
 		switch k {
 		case "ES4_SNAPSHOT_INTERVAL":
 			return "5s"
-		case "ES4_RESTORE_ON_STARTUP", "ES4_MEMORY_ONLY", "ES4_RECOVERY_PATH":
+		case "ES4_RESTORE_ON_STARTUP", "ES4_MEMORY_ONLY", "ES4_RECOVERY_PATH", "ES4_STATE_PATH":
 			return "" // empty = unset; must not clear
 		default:
 			return ""
@@ -153,6 +166,9 @@ func TestLoad_EmptyEnvSkipped(t *testing.T) {
 	}
 	if got.RecoveryPath != "/keep" {
 		t.Fatalf("empty env must not clear recovery_path, got %q", got.RecoveryPath)
+	}
+	if got.StatePath != "/keep-state" {
+		t.Fatalf("empty env must not clear state_path, got %q", got.StatePath)
 	}
 	if !got.RestoreOnStartup || got.MemoryOnly {
 		t.Fatal("empty/unset env must not change other fields")
@@ -285,6 +301,7 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 		RestoreOnStartup: true,
 		MemoryOnly:       true,
 		RecoveryPath:     "/should/ignore",
+		StatePath:        "/should/ignore-state",
 	}
 	eff := raw.Effective()
 	if eff.SnapshotInterval != 0 {
@@ -296,6 +313,9 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 	if eff.RecoveryPath != "" {
 		t.Fatalf("recovery_path should be ignored, got %q", eff.RecoveryPath)
 	}
+	if eff.StatePath != "" {
+		t.Fatalf("state_path should be ignored, got %q", eff.StatePath)
+	}
 	if !eff.MemoryOnly {
 		t.Fatal("memory_only must remain true")
 	}
@@ -304,6 +324,9 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 	}
 	if raw.RecoveryPath != "/should/ignore" {
 		t.Fatal("Effective must not mutate the receiver")
+	}
+	if raw.StatePath != "/should/ignore-state" {
+		t.Fatal("Effective must not mutate state_path on the receiver")
 	}
 }
 
@@ -314,6 +337,7 @@ func TestEffective_MemoryOnlyOff(t *testing.T) {
 		RestoreOnStartup: false,
 		MemoryOnly:       false,
 		RecoveryPath:     "/keep",
+		StatePath:        "/keep-state",
 	}
 	if raw.Effective() != raw {
 		t.Fatalf("got %#v want %#v", raw.Effective(), raw)

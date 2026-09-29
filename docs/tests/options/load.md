@@ -4,13 +4,14 @@ Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/spec
 
 ### Defaults
 
-- Phase 1 の既定値を返す
+- Phase 1 / 2 の既定値を返す
 
 #### テスト：正常系
 - `snapshot_interval` は 30 秒（`30s`）
 - `restore_on_startup` は `true`
 - `memory_only` は `false`
 - `recovery_path` は空文字
+- `state_path` は空文字
 
 ### Load（defaults → 任意 YAML → env）
 
@@ -20,10 +21,10 @@ Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/spec
 
 #### テスト：正常系
 - ファイルなし・env なしなら Defaults と同じ（Load defaults-only）
-- YAML ファイルの値が Defaults を上書きする（YAML overrides）
+- YAML ファイルの値が Defaults を上書きする（YAML overrides、`state_path` 含む）
 - 部分 YAML では未指定キーは既定のまま残る（partial YAML）
-- 同名の env が YAML 値をさらに上書きする（env overrides YAML）
-- 空／未設定の env はスキップされ、下位の値を消さない（empty/unset env skip）
+- 同名の env が YAML 値をさらに上書きする（env overrides YAML、`ES4_STATE_PATH` 含む）
+- 空／未設定の env はスキップされ、下位の値を消さない（empty/unset env skip、`ES4_STATE_PATH` 含む）
 
 #### テスト: 異常系
 - 設定ファイルが存在しない（パス指定あり）→ エラー（missing file）
@@ -33,12 +34,12 @@ Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/spec
 
 ### Effective（memory_only）
 
-- `memory_only` が `true` のとき Recovery 関連設定は無視する（設定エラーにはしない）
+- `memory_only` が `true` のとき Recovery 関連設定と `state_path` は無視する（設定エラーにはしない）
 
 #### テスト：正常系
 - `memory_only` `false` なら Effective は入力と同じ（memory_only off）
-- `memory_only` `true` なら `recovery_path`・`snapshot_interval`・`restore_on_startup` は無視相当（空／ゼロ／false）になる（memory_only on）
-- 生の Options に Recovery 値が残っていてもエラーにしない
+- `memory_only` `true` なら `recovery_path`・`snapshot_interval`・`restore_on_startup`・`state_path` は無視相当（空／ゼロ／false）になる（memory_only on）
+- 生の Options に Recovery / state_path 値が残っていてもエラーにしない
 
 ----
 

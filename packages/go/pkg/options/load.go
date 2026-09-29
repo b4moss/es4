@@ -66,6 +66,9 @@ func ApplyEnv(opts Options, getenv func(string) string) (Options, error) {
 	if v := getenv(EnvPrefix + "RECOVERY_PATH"); v != "" {
 		overlay.recoveryPath = &v
 	}
+	if v := getenv(EnvPrefix + "STATE_PATH"); v != "" {
+		overlay.statePath = &v
+	}
 	return merge(opts, overlay), nil
 }
 
@@ -79,6 +82,7 @@ type partial struct {
 	restoreOnStartup *bool
 	memoryOnly       *bool
 	recoveryPath     *string
+	statePath        *string
 }
 
 func loadFile(path string) (partial, error) {
@@ -133,6 +137,12 @@ func loadFile(path string) (partial, error) {
 				return partial{}, fmt.Errorf("options: recovery_path: %w", err)
 			}
 			out.recoveryPath = &s
+		case "state_path":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_path: %w", err)
+			}
+			out.statePath = &s
 		}
 	}
 	return out, nil
@@ -151,6 +161,9 @@ func merge(base Options, over partial) Options {
 	}
 	if over.recoveryPath != nil {
 		out.RecoveryPath = *over.recoveryPath
+	}
+	if over.statePath != nil {
+		out.StatePath = *over.statePath
 	}
 	return out
 }

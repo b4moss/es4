@@ -1,6 +1,6 @@
 # Snapshot 仕様
 
-内部 Snapshot の正本（公開 API ではない）。Phase 1 / SemVer `v0.2.0`。
+内部 Snapshot の正本（公開 API ではない）。Phase 1 / SemVer `v0.2.0`、Phase 2 でも論理 entries 封筒を維持。
 
 ## 概要
 
@@ -14,7 +14,7 @@ Current State から Recovery Point へ渡す中間表現。実装は `packages/
 
 - **version:** Phase 1 では `1`
 - **後方互換:** `v0` 期間は形式の後方互換を約束しない
-- **payload:** Backend 固有。インメモリ実装は `{ "entries": { "<key>": <json>, ... } }`
+- **payload:** 論理 entries 形式 `{ "entries": { "<key>": <json>, ... } }`（Memory / SQLite 共通）。SQLite の DB ファイルを Recovery にコピーしない（Export で entries を載せる）
 
 ## ライフサイクル
 

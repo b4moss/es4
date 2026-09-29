@@ -6,9 +6,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/b4moss/es4/packages/go/internal/state"
 	"github.com/b4moss/es4/packages/go/pkg/es4"
 	"github.com/b4moss/es4/packages/go/pkg/options"
 )
@@ -333,4 +335,344 @@ func TestDB_EffectiveConsumed(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("Effective memory_only must skip recovery writes")
 	}
+}
+
+func TestOpen_BackendSelection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("memory_only", func(t *testing.T) {
+		t.Parallel()
+		db, err := es4.Open(ctx, options.Options{
+			MemoryOnly: true,
+			StatePath:  filepath.Join(t.TempDir(), "ignored.db"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Memory); !ok {
+			t.Fatalf("want Memory, got %T", db.StateForTest())
+		}
+	})
+
+	t.Run("state_path", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "state.db")
+		db, err := es4.Open(ctx, options.Options{
+			StatePath:        path,
+			SnapshotInterval: 0,
+			RestoreOnStartup: false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.SQLite); !ok {
+			t.Fatalf("want SQLite, got %T", db.StateForTest())
+		}
+	})
+
+	t.Run("empty_state_path", func(t *testing.T) {
+		t.Parallel()
+		db, err := es4.Open(ctx, options.Options{SnapshotInterval: 0, RestoreOnStartup: false})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Memory); !ok {
+			t.Fatalf("want Memory, got %T", db.StateForTest())
+		}
+	})
+
+	t.Run("open_with_injection", func(t *testing.T) {
+		t.Parallel()
+		injected := state.NewMemory()
+		db, err := es4.OpenWith(ctx, es4.OpenConfig{
+			Options: options.Options{
+				StatePath:        filepath.Join(t.TempDir(), "would-be-sqlite.db"),
+				SnapshotInterval: 0,
+				RestoreOnStartup: false,
+			},
+			State: injected,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if db.StateForTest() != injected {
+			t.Fatal("OpenWith injection must take priority")
+		}
+	})
+}
+
+func TestOpen_SQLite_RestoreOnStartup(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.db")
+	recPath := filepath.Join(dir, "rp.json")
+	opts := options.Options{
+		StatePath:        statePath,
+		RecoveryPath:     recPath,
+		RestoreOnStartup: true,
+		SnapshotInterval: 0,
+	}
+	db1, err := es4.OpenWith(ctx, es4.OpenConfig{Options: opts, SkipAsyncRestore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db1.Set(ctx, "a", json.RawMessage(`{"ok":true}`))
+	if err := db1.SnapshotNow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_ = db1.Close()
+
+	// New empty sqlite + restore from recovery.
+	_ = os.Remove(statePath)
+	db2, err := es4.OpenWith(ctx, es4.OpenConfig{Options: opts, SkipAsyncRestore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db2.Close() })
+	got, err := db2.Get(ctx, "a")
+	if err != nil || string(got) != `{"ok":true}` {
+		t.Fatalf("got %s err=%v", got, err)
+	}
+}
+
+func TestOpen_SQLite_RestoreMissing_Continues(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	db, err := es4.OpenWith(ctx, es4.OpenConfig{
+		Options: options.Options{
+			StatePath:        filepath.Join(dir, "s.db"),
+			RecoveryPath:     filepath.Join(dir, "missing.json"),
+			RestoreOnStartup: true,
+			SnapshotInterval: 0,
+		},
+		SkipAsyncRestore: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	ok, err := db.Exists(ctx, "x")
+	if err != nil || ok {
+		t.Fatalf("want empty: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSnapshot_SQLite_EntriesEnvelope_NotDBCopy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.db")
+	recPath := filepath.Join(dir, "rp.json")
+	db, err := es4.OpenWith(ctx, es4.OpenConfig{
+		Options: options.Options{
+			StatePath:        statePath,
+			RecoveryPath:     recPath,
+			RestoreOnStartup: false,
+			SnapshotInterval: 0,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	_ = db.Set(ctx, "users/1", json.RawMessage(`{"n":7}`))
+	if err := db.SnapshotNow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(recPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Must be JSON envelope with entries — not a SQLite DB binary.
+	if len(data) < 2 || data[0] != '{' {
+		t.Fatalf("recovery must be JSON envelope, got prefix %q", data[:min(16, len(data))])
+	}
+	if !json.Valid(data) {
+		t.Fatal("recovery must be valid JSON")
+	}
+	var env struct {
+		Version   int             `json:"version"`
+		CreatedAt time.Time       `json:"created_at"`
+		Payload   json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.Version != 1 {
+		t.Fatalf("version: %d", env.Version)
+	}
+	if env.CreatedAt.IsZero() {
+		t.Fatal("created_at required")
+	}
+	var payload struct {
+		Entries map[string]json.RawMessage `json:"entries"`
+	}
+	if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if string(payload.Entries["users/1"]) != `{"n":7}` {
+		t.Fatalf("entries: %#v", payload.Entries)
+	}
+}
+
+func TestDB_Tx_MemoryAndSQLite(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	backends := []struct {
+		name string
+		opts options.Options
+	}{
+		{"memory", options.Options{MemoryOnly: true}},
+		{"sqlite", options.Options{
+			StatePath:        filepath.Join(t.TempDir(), "tx.db"),
+			SnapshotInterval: 0,
+			RestoreOnStartup: false,
+		}},
+	}
+	for _, bc := range backends {
+		bc := bc
+		t.Run(bc.name, func(t *testing.T) {
+			t.Parallel()
+			db, err := es4.Open(ctx, bc.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+
+			tx, err := db.BeginTx(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Set(ctx, "k", json.RawMessage(`1`)); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			got, err := db.Get(ctx, "k")
+			if err != nil || string(got) != "1" {
+				t.Fatalf("after commit: %s err=%v", got, err)
+			}
+
+			tx2, err := db.BeginTx(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = tx2.Set(ctx, "r", json.RawMessage(`2`))
+			if err := tx2.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			_, err = db.Get(ctx, "r")
+			if !errors.Is(err, es4.ErrNotFound) {
+				t.Fatalf("after rollback: %v", err)
+			}
+
+			tx3, err := db.BeginTx(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = tx3.Set(ctx, "x", json.RawMessage(`3`))
+			if err := tx3.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx3.Set(ctx, "x", json.RawMessage(`4`)); !errors.Is(err, es4.ErrTxDone) {
+				t.Fatalf("reuse: %v", err)
+			}
+
+			tx4, err := db.BeginTx(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = db.BeginTx(ctx)
+			if !errors.Is(err, es4.ErrNestedTx) {
+				t.Fatalf("nested: %v", err)
+			}
+			_ = tx4.Rollback()
+		})
+	}
+}
+
+func TestDB_Tx_CloseRollsBack(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "close-rb.db")
+	db, err := es4.Open(ctx, options.Options{
+		StatePath:        path,
+		SnapshotInterval: 0,
+		RestoreOnStartup: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.BeginTx(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tx.Set(ctx, "k", json.RawMessage(`1`))
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db2, err := es4.Open(ctx, options.Options{
+		StatePath:        path,
+		SnapshotInterval: 0,
+		RestoreOnStartup: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db2.Close() })
+	_, err = db2.Get(ctx, "k")
+	if !errors.Is(err, es4.ErrNotFound) {
+		t.Fatalf("close must rollback open tx: %v", err)
+	}
+}
+
+func TestDB_Tx_ConcurrentSmoke(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, err := es4.Open(ctx, options.Options{
+		StatePath:        filepath.Join(t.TempDir(), "conc.db"),
+		SnapshotInterval: 0,
+		RestoreOnStartup: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			key := "k/" + string(rune('a'+i%8))
+			_ = db.Set(ctx, key, json.RawMessage(`1`))
+			tx, err := db.BeginTx(ctx)
+			if err != nil {
+				return
+			}
+			_ = tx.Set(ctx, key, json.RawMessage(`2`))
+			if i%2 == 0 {
+				_ = tx.Commit()
+			} else {
+				_ = tx.Rollback()
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

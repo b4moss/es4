@@ -1,7 +1,7 @@
 # Options（設定）仕様
 
-現行バージョンに存在する振る舞いの正本（Phase 1）。  
-State / Snapshot / Recovery の正本は各ドメイン specs を参照。
+現行バージョンに存在する振る舞いの正本（Phase 1 / Phase 2）。  
+State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 
 ## 概要
 
@@ -15,6 +15,7 @@ State / Snapshot / Recovery の正本は各ドメイン specs を参照。
 | `restore_on_startup` | bool（小文字 `true`/`false` のみ） | `true` | `ES4_RESTORE_ON_STARTUP` |
 | `memory_only` | bool（小文字 `true`/`false` のみ） | `false` | `ES4_MEMORY_ONLY` |
 | `recovery_path` | string（ファイルパス） | `""` | `ES4_RECOVERY_PATH` |
+| `state_path` | string（オンディスク SQLite パス） | `""` | `ES4_STATE_PATH` |
 
 ## 振る舞い
 
@@ -37,15 +38,20 @@ State / Snapshot / Recovery の正本は各ドメイン specs を参照。
 - duration / bool の受理規則は設定ファイルと同じ（Go duration 文字列のみ、小文字 `true`/`false` のみ）
 - 空文字は未設定扱い（スキップ）。下位の値を消さない
 
-### memory_only と Recovery
+### memory_only と Recovery / state_path
 
 - 前提: `memory_only` が `true`
-- 手順: Recovery 関連設定（`recovery_path`・`snapshot_interval`・`restore_on_startup`）は**無視して続行**する。設定エラーにはしない
-- 下流の Snapshot / Recovery は `Effective()` の値を消費する
+- 手順: Recovery 関連設定（`recovery_path`・`snapshot_interval`・`restore_on_startup`）および `state_path` は**無視して続行**する。設定エラーにはしない
+- 下流の Snapshot / Recovery / Open は `Effective()` の値を消費する（`Effective()` は `state_path` もクリアする）
 
 ### recovery_path
 
 - Recovery のファイルパスは Options の `recovery_path` で渡す
+
+### state_path
+
+- オンディスク SQLite State のパス。非空かつ `memory_only` false のとき Open は SQLite Backend を選ぶ
+- 空なら Memory（互換）。`memory_only` true なら無視
 
 ## 関連
 
@@ -53,6 +59,7 @@ State / Snapshot / Recovery の正本は各ドメイン specs を参照。
 - State: [`docs/specs/state/`](../state/)
 - Snapshot: [`docs/specs/snapshot/`](../snapshot/)
 - Recovery: [`docs/specs/recovery/`](../recovery/)
+- Tx: [`docs/specs/tx/`](../tx/)
 - Server env: [`docs/plans/v0.5.0/es4-server.md`](../../plans/v0.5.0/es4-server.md#決定事項)
 
 ----
