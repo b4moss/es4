@@ -7,6 +7,7 @@
 
 - 階層キー（`/`）と任意 JSON 値に対する CRUD。同一プロセス内は内部ロックで直列化。
 - 呼び出しは `context.Context` 付きの同期 API（非同期志向）。
+- Memory / SQLite で同じ公開契約。
 
 #### テスト：正常系
 - `SET` したキーを `GET` で同じ JSON として読める
@@ -21,12 +22,32 @@
 - 不正 JSON 値 → `ErrInvalidValue`
 - キャンセル済み `context` → `context` エラー
 
-### Memory Export / Replace
+### Memory / SQLite Export / Replace
 
-- Snapshot / Restore 用のアダプタ内部 API
+- Snapshot / Restore 用のアダプタ内部 API。論理 `{entries}` 形式。
 
 #### テスト：正常系
-- `Export` の結果を別 Memory へ `Replace` すると同じ内容になる
+- `Export` の結果を別 Memory / SQLite へ `Replace` すると同じ内容になる（相互に同じ entries）
+
+### SQLite 永続
+
+#### テスト：正常系
+- Close → 再 Open で内容が残る
+- 別 path は非干渉
+- 欠落ファイルは新規空で成功
+
+#### テスト: 異常系
+- 開けない path → Open エラー
+
+### Open 配線
+
+#### テスト：正常系
+- `memory_only` → Memory
+- `state_path` 非空 → SQLite
+- `state_path` 空 → Memory
+- `OpenWith` 注入が優先
+- SQLite + `recovery_path` + `restore_on_startup` で Restore 可（欠落は空続行）
+- `memory_only` 時 Recovery R/W なし
 
 ----
 

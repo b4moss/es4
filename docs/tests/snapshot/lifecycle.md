@@ -5,10 +5,11 @@
 
 ### Envelope
 
-- 版付き共通封筒（`version` + `created_at` + `payload`）。payload は Backend 固有。
+- 版付き共通封筒（`version` + `created_at` + `payload`）。payload は論理 `{entries}`（Memory / SQLite 共通）。
 
 #### テスト：正常系
-- Take → Recovery 保存 → Decode で version / created_at / memory payload が復元できる
+- Take → Recovery 保存 → Decode で version / created_at / entries payload が復元できる
+- SQLite State でも同じ entries 封筒（DB ファイルを Recovery にコピーしない）
 - Recovery が nil（書き込み無効）でも Take はエラーにしない
 
 ### Periodic
@@ -18,6 +19,7 @@
 #### テスト：正常系
 - Interval > 0 なら一定時間内に Recovery へ書き込まれる
 - Stop 後は追加書き込みが止まる（Close 経由で検証可）
+- `memory_only` では定期／Recovery 書き込みなし
 
 ### Explicit（内部）
 
@@ -30,6 +32,7 @@
 
 #### テスト：正常系
 - 封筒バイト列を State へ Restore するとエントリが戻る
+- Snapshot → File Recovery → Restore（SQLite 含む）で戻る
 
 ----
 

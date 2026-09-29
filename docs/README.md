@@ -138,7 +138,7 @@ flowchart LR
 - [plans](./plans/) — これからやる内容
 - [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) — スキャフォールド完了・module path・最初の Git タグ方針
 - [Phase 1 仕様](./specs/state/) — State / [Snapshot](./specs/snapshot/) / [Recovery](./specs/recovery/) / [Options](./specs/options/)（`v0.2.0` 実装完了・plans から移動済み）
-- [Phase 2 決定事項](./plans/v0.3.0/sqlite-state.md#決定事項) — オンディスク SQLite・Tx API・並行
+- [Phase 2 仕様](./specs/state/) — SQLite State / [Tx](./specs/tx/) / [Snapshot](./specs/snapshot/) / [Options](./specs/options/)（`v0.3.0` 実装完了・plans から移動済み）
 - [Phase 3 決定事項](./plans/v0.4.0/external-recovery.md#決定事項) — Adapter 順・世代 TTL・GCS＝S3 互換
 - [Phase 4 決定事項](./plans/v0.5.0/es4-server.md#決定事項) — HTTP REST・`ES4_` 環境変数・Health／Cloud Run
 - [Phase 5 決定事項](./plans/v0.6.0/state-backend-extension.md#決定事項) — その他／Redis・Valkey Unscheduled・最適化境界

@@ -1,5 +1,5 @@
-// Package state defines the State Store adapter contract and the in-memory
-// JSON implementation used by Phase 1.
+// Package state defines the State Store adapter contract, in-memory and
+// on-disk SQLite implementations, and the Tx surface (separate from Store).
 package state
 
 import (
@@ -30,14 +30,17 @@ type Store interface {
 	Export(ctx context.Context) (map[string]json.RawMessage, error)
 	// Replace atomically replaces all entries (for Restore).
 	Replace(ctx context.Context, entries map[string]json.RawMessage) error
+	// BeginTx starts a transaction. Nested Begin returns ErrNestedTx.
+	BeginTx(ctx context.Context) (Tx, error)
 	Close() error
 }
 
 // Memory is an in-process JSON document store.
 type Memory struct {
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	entries map[string]json.RawMessage
 	closed  bool
+	active  *memoryTx
 }
 
 // NewMemory returns an empty in-memory State adapter.
@@ -45,7 +48,7 @@ func NewMemory() *Memory {
 	return &Memory{entries: make(map[string]json.RawMessage)}
 }
 
-// ValidateKey checks Phase 1 hierarchical key rules (`/` separator).
+// ValidateKey checks hierarchical key rules (`/` separator).
 // Rejects empty, leading `/`, trailing `/`, and consecutive `//`.
 func ValidateKey(key string) error {
 	if key == "" {
@@ -103,8 +106,8 @@ func (m *Memory) Get(ctx context.Context, key string) (json.RawMessage, error) {
 		return nil, err
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.closed {
 		return nil, ErrClosed
 	}
@@ -143,8 +146,8 @@ func (m *Memory) Exists(ctx context.Context, key string) (bool, error) {
 		return false, err
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.closed {
 		return false, ErrClosed
 	}
@@ -171,8 +174,8 @@ func (m *Memory) Export(ctx context.Context) (map[string]json.RawMessage, error)
 		return nil, err
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.closed {
 		return nil, ErrClosed
 	}
@@ -208,10 +211,187 @@ func (m *Memory) Replace(ctx context.Context, entries map[string]json.RawMessage
 	return nil
 }
 
+func (m *Memory) BeginTx(ctx context.Context) (Tx, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, ErrClosed
+	}
+	if m.active != nil {
+		return nil, ErrNestedTx
+	}
+	tx := &memoryTx{
+		m:       m,
+		overlay: make(map[string]overlayEntry),
+	}
+	m.active = tx
+	return tx, nil
+}
+
 func (m *Memory) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.active != nil {
+		m.active.done = true
+		m.active = nil
+	}
 	m.closed = true
 	m.entries = nil
+	return nil
+}
+
+type overlayEntry struct {
+	deleted bool
+	value   json.RawMessage
+}
+
+type memoryTx struct {
+	m       *Memory
+	overlay map[string]overlayEntry
+	cleared bool
+	done    bool
+}
+
+func (t *memoryTx) withLock(ctx context.Context, fn func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	t.m.mu.Lock()
+	defer t.m.mu.Unlock()
+	if t.done || t.m.active != t {
+		return ErrTxDone
+	}
+	if t.m.closed {
+		return ErrClosed
+	}
+	return fn()
+}
+
+func (t *memoryTx) Set(ctx context.Context, key string, value json.RawMessage) error {
+	if err := ValidateKey(key); err != nil {
+		return err
+	}
+	if err := ValidateValue(value); err != nil {
+		return err
+	}
+	cp := append(json.RawMessage(nil), value...)
+	return t.withLock(ctx, func() error {
+		t.overlay[key] = overlayEntry{value: cp}
+		return nil
+	})
+}
+
+func (t *memoryTx) Get(ctx context.Context, key string) (json.RawMessage, error) {
+	if err := ValidateKey(key); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.withLock(ctx, func() error {
+		if e, ok := t.overlay[key]; ok {
+			if e.deleted {
+				return ErrNotFound
+			}
+			out = append(json.RawMessage(nil), e.value...)
+			return nil
+		}
+		if t.cleared {
+			return ErrNotFound
+		}
+		v, ok := t.m.entries[key]
+		if !ok {
+			return ErrNotFound
+		}
+		out = append(json.RawMessage(nil), v...)
+		return nil
+	})
+	return out, err
+}
+
+func (t *memoryTx) Delete(ctx context.Context, key string) error {
+	if err := ValidateKey(key); err != nil {
+		return err
+	}
+	return t.withLock(ctx, func() error {
+		if e, ok := t.overlay[key]; ok {
+			if e.deleted {
+				return ErrNotFound
+			}
+			t.overlay[key] = overlayEntry{deleted: true}
+			return nil
+		}
+		if t.cleared {
+			return ErrNotFound
+		}
+		if _, ok := t.m.entries[key]; !ok {
+			return ErrNotFound
+		}
+		t.overlay[key] = overlayEntry{deleted: true}
+		return nil
+	})
+}
+
+func (t *memoryTx) Exists(ctx context.Context, key string) (bool, error) {
+	if err := ValidateKey(key); err != nil {
+		return false, err
+	}
+	var ok bool
+	err := t.withLock(ctx, func() error {
+		if e, hit := t.overlay[key]; hit {
+			ok = !e.deleted
+			return nil
+		}
+		if t.cleared {
+			ok = false
+			return nil
+		}
+		_, ok = t.m.entries[key]
+		return nil
+	})
+	return ok, err
+}
+
+func (t *memoryTx) Clear(ctx context.Context) error {
+	return t.withLock(ctx, func() error {
+		t.cleared = true
+		t.overlay = make(map[string]overlayEntry)
+		return nil
+	})
+}
+
+func (t *memoryTx) Commit() error {
+	t.m.mu.Lock()
+	defer t.m.mu.Unlock()
+	if t.done || t.m.active != t {
+		return ErrTxDone
+	}
+	if t.m.closed {
+		return ErrClosed
+	}
+	if t.cleared {
+		t.m.entries = make(map[string]json.RawMessage)
+	}
+	for k, e := range t.overlay {
+		if e.deleted {
+			delete(t.m.entries, k)
+			continue
+		}
+		t.m.entries[k] = append(json.RawMessage(nil), e.value...)
+	}
+	t.done = true
+	t.m.active = nil
+	return nil
+}
+
+func (t *memoryTx) Rollback() error {
+	t.m.mu.Lock()
+	defer t.m.mu.Unlock()
+	if t.done || t.m.active != t {
+		return ErrTxDone
+	}
+	t.done = true
+	t.m.active = nil
 	return nil
 }

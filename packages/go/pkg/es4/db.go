@@ -1,13 +1,15 @@
-// Package es4 is the public library entry for Phase 1.
+// Package es4 is the public library entry for Phase 1 / Phase 2.
 //
-// The public surface is the State API only (SET / GET / DELETE / EXISTS / CLEAR).
-// Snapshot and Recovery are internal and driven by Open / Close lifecycle.
+// The public surface is the State API (SET / GET / DELETE / EXISTS / CLEAR)
+// and the Tx API (BeginTx). Snapshot and Recovery are internal and driven by
+// Open / Close lifecycle.
 package es4
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/b4moss/es4/packages/go/internal/recovery"
@@ -22,9 +24,14 @@ var (
 	ErrInvalidKey   = state.ErrInvalidKey
 	ErrInvalidValue = state.ErrInvalidValue
 	ErrClosed       = state.ErrClosed
+	ErrTxDone       = state.ErrTxDone
+	ErrNestedTx     = state.ErrNestedTx
 )
 
-// DB is an open Es4 handle. Methods implement the public State API.
+// Tx is the public transactional State surface (separate from the non-Tx API).
+type Tx = state.Tx
+
+// DB is an open Es4 handle. Methods implement the public State API and Tx API.
 // Snapshot / Recovery run internally according to Options.Effective().
 type DB struct {
 	opts     options.Options // Effective values
@@ -41,7 +48,7 @@ type DB struct {
 // Production callers normally use Open with Options only.
 type OpenConfig struct {
 	Options  options.Options
-	State    state.Store    // default: in-memory
+	State    state.Store    // default: selected from Effective Options
 	Recovery recovery.Store // default: file at Effective.RecoveryPath when set
 	// SkipAsyncRestore, when true, runs startup restore synchronously inside Open
 	// (still does not gate the State API afterward). Used by tests that need
@@ -52,6 +59,11 @@ type OpenConfig struct {
 }
 
 // Open builds a DB from Options. Consumes opts.Effective().
+//
+// Backend selection (when State is not injected via OpenWith):
+//   - memory_only → Memory (state_path ignored)
+//   - state_path non-empty → on-disk SQLite
+//   - empty state_path → Memory (compat)
 //
 // Lifecycle:
 //   - restore_on_startup (Effective): load recovery file if present/readable;
@@ -64,6 +76,7 @@ func Open(ctx context.Context, opts options.Options) (*DB, error) {
 }
 
 // OpenWith opens with explicit adapter injection (swappable State / Recovery).
+// Injected State takes priority over Options-based backend selection.
 func OpenWith(ctx context.Context, cfg OpenConfig) (*DB, error) {
 	return open(ctx, cfg)
 }
@@ -76,7 +89,11 @@ func open(ctx context.Context, cfg OpenConfig) (*DB, error) {
 
 	st := cfg.State
 	if st == nil {
-		st = state.NewMemory()
+		var err error
+		st, err = openDefaultState(eff)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var rec recovery.Store
@@ -125,6 +142,17 @@ func open(ctx context.Context, cfg OpenConfig) (*DB, error) {
 
 	mgr.Start()
 	return db, nil
+}
+
+func openDefaultState(eff options.Options) (state.Store, error) {
+	if eff.MemoryOnly || eff.StatePath == "" {
+		return state.NewMemory(), nil
+	}
+	st, err := state.OpenSQLite(eff.StatePath)
+	if err != nil {
+		return nil, fmt.Errorf("es4: open sqlite state: %w", err)
+	}
+	return st, nil
 }
 
 func (db *DB) restoreOnce(ctx context.Context) error {
@@ -186,7 +214,17 @@ func (db *DB) Clear(ctx context.Context) error {
 	return db.state.Clear(ctx)
 }
 
-// Close stops periodic snapshots and releases resources.
+// BeginTx starts a transaction (Tx API; separate from the non-Tx State API).
+// Nested Begin returns ErrNestedTx. Uncommitted transactions are rolled back
+// on Close.
+func (db *DB) BeginTx(ctx context.Context) (Tx, error) {
+	if err := db.guard(ctx); err != nil {
+		return nil, err
+	}
+	return db.state.BeginTx(ctx)
+}
+
+// Close stops periodic snapshots, rolls back any open Tx, and releases resources.
 func (db *DB) Close() error {
 	db.mu.Lock()
 	if db.closed {
