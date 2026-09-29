@@ -66,9 +66,9 @@ PO Q&A で確定した Phase 1（`v0.2.0` 暫定）の事実。実装詳細（�
 ## メモ
 
 - SemVer `v0.2.0` は暫定割当。正式版名が決まり次第フォルダと roadmap を更新する。
-- 詳細仕様（受け入れ条件・API・テスト方針）は実装直前に `仕様詳細` へ上げて詰める。Phase 1 の親論点は閉じた。残る未決は [open-questions](../open-questions.md)（Phase 3 以降の固有項目など）。
+- 詳細仕様（受け入れ条件・API・テスト方針）は実装直前に `仕様詳細` へ上げて詰める。Phase 1 の親論点は閉じた。[open-questions](../open-questions.md) も残件なし。
 - 実装完了後は本ファイルを `docs/specs/` の対応ドメインへ**移動**する（plans に残さない）。
-- 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md) · [open-questions](../open-questions.md)
+- 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md) · [open-questions](../open-questions.md)（残件なし）
 
 ----
 
