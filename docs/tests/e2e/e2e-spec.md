@@ -3,16 +3,23 @@
 正本のドメイン仕様: [`docs/specs/recovery/`](../../specs/recovery/) · [`docs/specs/snapshot/`](../../specs/snapshot/) · [`docs/specs/options/`](../../specs/options/) · [`docs/specs/state/`](../../specs/state/)。  
 本ファイルは **Docker 上の RustFS を S3 互換 Object Recovery として使い、プロセス再起動後の復元を検証する** E2E の手順と成功条件を定める。
 
-実装配置の推奨（実装 PR で確定してよい）:
-- ハーネス: `packages/go` 配下の `*_e2e_test.go`（例: `internal/recovery` または `pkg/es4`）＋ `//go:build e2e`
-- Compose: `docker/e2e/` または `testdata/e2e/`（RustFS サービス定義）
-- 本仕様の docs 配置: `docs/tests/e2e/e2e-spec.md`（本ファイル）
+実装配置（v0.7.0）:
+- ハーネス: `packages/go/pkg/es4/object_recovery_e2e_test.go`（`//go:build e2e`）＋共有ヘルパ `packages/go/internal/e2e`
+- Compose: [`docker/e2e/docker-compose.yml`](../../../docker/e2e/docker-compose.yml)（README: [`docker/e2e/README.md`](../../../docker/e2e/README.md)）
+- CI: [`.github/workflows/e2e-object-recovery.yml`](../../../.github/workflows/e2e-object-recovery.yml)（**`workflow_dispatch` のみ**）
+- 本仕様: `docs/tests/e2e/e2e-spec.md`（本ファイル）
 
-必須検証コマンド例（実装後）:
+必須検証コマンド:
 ```text
-# RustFS 起動後
+# RustFS 起動後（docker compose -f docker/e2e/docker-compose.yml up -d）
 cd packages/go && go test -tags=e2e ./... -count=1
 ```
+
+エンドポイント／認証（Compose 既定）:
+- S3 API: `http://127.0.0.1:9000`（path-style）
+- Access / Secret: `es4e2eaccess` / `es4e2esecretkey`
+- Region: `us-east-1`（ダミー可）
+- 上書き: `ES4_E2E_S3_ENDPOINT` · `ES4_E2E_S3_REGION` · `ES4_E2E_S3_ACCESS_KEY` / `AWS_ACCESS_KEY_ID` · `ES4_E2E_S3_SECRET_KEY` / `AWS_SECRET_ACCESS_KEY`
 
 ----
 
@@ -50,10 +57,10 @@ es4 の永続化経路は次のとおりです。
 
 ### 3.1 RustFS（Docker）
 
-- Docker Compose（または同等）で **RustFS** を 1 サービス起動する
+- Docker Compose（[`docker/e2e/docker-compose.yml`](../../../docker/e2e/docker-compose.yml)）で **RustFS** を 1 サービス起動する
 - es4 からは **S3 互換 API**（AWS SDK v2 系）で到達する
-- エンドポイント例（実装で固定し docs に書く）: `http://127.0.0.1:<mapped-port>`
-- 認証: RustFS のアクセスキー／シークレットを E2E 専用に用意し、**標準 AWS 系環境変数**（またはテスト内の静的クレデンシャルプロバイダ）で渡す
+- エンドポイント: `http://127.0.0.1:9000`（`ES4_E2E_S3_ENDPOINT` で上書き可）
+- 認証: E2E 専用キー（Compose 既定）を静的クレデンシャルプロバイダ／標準 AWS 系環境変数で渡す
 - ホストの永続ボリュームに依存しすぎないこと（テストはバケット／プレフィックスのクリアで隔離）。RustFS データディレクトリは CI ではエフェメラルでよい
 
 ### 3.2 es4 側 Options（Effective）
@@ -63,27 +70,27 @@ es4 の永続化経路は次のとおりです。
 | `recovery_backend` | `object` |
 | `recovery_s3_bucket` | テスト用バケット名（§4） |
 | `recovery_s3_prefix` | ラン／ケース隔離用プレフィックス（§4） |
-| `recovery_s3_region` | RustFS が要求する値（例: `us-east-1`）。ダミー可ならその旨を実装 docs に |
+| `recovery_s3_region` | `us-east-1`（ダミー可） |
 | `recovery_s3_endpoint` | RustFS の HTTP エンドポイント |
 | `restore_on_startup` | `true` |
 | `memory_only` | `false`（Recovery を使う） |
-| `state_path` | テンポラリの SQLite パス（再起動をまたぐなら同じパス、または Memory＋Recovery のみで検証する方針を一つに固定） |
-| `snapshot_interval` | 明示フラッシュする場合は長くてよい。間隔任せにする場合は短く＋待機 |
+| `state_path` | **空**（Memory State）。再起動証明は Recovery → Restore に固定 |
+| `snapshot_interval` | `0`（明示 `SnapshotNow` でフラッシュ） |
 
-**State Backend:** 既定は Phase 2 どおり SQLite（`state_path`）を推奨。Memory のみだとプロセス再起動で State が消えるため、復元の証明は **Recovery → Restore** に依存する（それでも本 E2E の目的は達成可能）。仕様上は「再起動後の Open で Restore が走り、検証キーが読める」ことを成功とする。
+**State Backend:** 空 `state_path` で Memory を選び、Close 後にプロセス内 State は消える。復元の証明は **Recovery → Restore** に依存する（本 E2E の目的）。仕様上は「再起動後の Open で Restore が走り、検証キーが読める」ことを成功とする。
 
 ### 3.3 S3 クライアントの差し替え（肥大化抑制）
 
 既存契約: `internal/recovery.ObjectConfig.Client`（`ObjectAPI`）および `OpenWith` による Recovery 注入。
 
-E2E では次のいずれかを **一つに固定**する（推奨は A）。
+E2E では **方式 A** に固定する。
 
 | 方式 | 内容 |
 |------|------|
-| **A（推奨）** | 小さなヘルパが RustFS endpoint＋静的クレデンシャルで AWS SDK S3 クライアントを組み立て、`ObjectConfig{Client: ...}` または `OpenObject`／`OpenWith` で注入。テスト本体は「Open → 書き込み → Snapshot 完了待ち → Close → 再 Open → Get」に留める |
+| **A（採用）** | `internal/e2e` ヘルパが RustFS endpoint＋静的クレデンシャルで AWS SDK S3 クライアントを組み立て、`ObjectConfig{Client: ...}` ＋ `OpenWith` で注入。テスト本体は「Open → 書き込み → SnapshotNow → Close → 再 Open → Get」に留める |
 | B | 環境変数のみ（`AWS_ACCESS_KEY_ID` 等＋`recovery_s3_*`）で本番同様の `OpenObject` 経路。ヘルパは env セットアップとバケット準備に限定 |
 
-テストコードに RustFS の管理 UI 操作や大きな SDK ラッパを埋め込まない。共通ヘルパ（バケット作成／空にする／プレフィックス削除／Compose 待機）は `e2e` パッケージに集約する。
+テストコードに RustFS の管理 UI 操作や大きな SDK ラッパを埋め込まない。共通ヘルパ（バケット作成／空にする／プレフィックス削除／Compose 待機）は `internal/e2e` に集約する。
 
 ----
 
@@ -91,7 +98,7 @@ E2E では次のいずれかを **一つに固定**する（推奨は A）。
 
 ### 4.1 命名
 
-- **バケット:** テストごと（またはスイート開始時）に新規作成する。名前は衝突しにくいこと（例: `es4-e2e-<unix>-<random>`）。RustFS／S3 のバケット命名規則に従う
+- **バケット:** テストごとに新規作成する。名前は衝突しにくいこと（例: `es4-e2e-<unix>-<random>`）。RustFS／S3 のバケット命名規則に従う
 - **プレフィックス:** ケースごとに一意（例: `run-<id>/case-<name>/`）。`recovery_s3_prefix` に設定する。同一バケットを再利用する場合でもプレフィックスで隔離する
 
 ### 4.2 開始時クリア
@@ -186,7 +193,8 @@ E2E では次のいずれかを **一つに固定**する（推奨は A）。
 - Recovery: [`docs/specs/recovery/recovery.md`](../../specs/recovery/recovery.md)
 - Options（`recovery_s3_*`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
 - Snapshot: [`docs/specs/snapshot/`](../../specs/snapshot/)
-- 単体に近い Object テスト: `packages/go/internal/recovery/object_test.go`（本 E2E とは別。フェイク／実 RustFS）
+- 単体に近い Object テスト: `packages/go/internal/recovery/object_test.go`（本 E2E とは別。フェイク）
+- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md)
 
 ----
 

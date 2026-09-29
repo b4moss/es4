@@ -5,7 +5,7 @@
 
 # Open Questions（未決プロダクト論点）
 
-**現状: 残件なし。** PO Q&A で Phase 0–5 の親論点はすべて各 Phase plan の決定事項へ落とした。
+**現状: 残件なし。** PO Q&A で Phase 0–6 の親論点はすべて各 Phase plan の決定事項へ落とした。
 
 新規の未決が出たら本ファイルに優先度順で戻す。確定事実はここに書かず、該当 `plans/` の決定事項を正とする。
 
@@ -19,8 +19,9 @@
 | Phase 3 — 外部 Recovery | `v0.4.0` | [recovery](../specs/recovery/) · [options](../specs/options/) |
 | Phase 4 — Es4 Server | `v0.5.0` | [es4-server](../specs/es4-server/) |
 | Phase 5 — State Backend 拡張 | `v0.6.0` | [state](../specs/state/) · [完了注記](./v0.6.0/state-backend-extension.md#決定事項) |
+| Phase 6 — E2E Object Recovery × RustFS | `v0.7.0` | [tests/e2e](../tests/e2e/) · [完了注記](./v0.7.0/e2e-object-recovery.md#決定事項) |
 
-直近で閉じた Phase 3–5 の論点（世代 TTL、GCS＝S3 互換 Adapter、HTTP REST・パスキー、`ES4_`＋SCREAMING_SNAKE、Liveness／Readiness、Cloud Run、その他／Redis・Valkey Unscheduled、最適化境界）の詳細は上表の各決定事項を参照。
+直近で閉じた Phase 3–6 の論点（世代 TTL、GCS＝S3 互換 Adapter、HTTP REST・パスキー、`ES4_`＋SCREAMING_SNAKE、Liveness／Readiness、Cloud Run、その他／Redis・Valkey Unscheduled、最適化境界、RustFS E2E）の詳細は上表の各決定事項を参照。
 
 ## 意図的にここに書かないもの
 
@@ -31,7 +32,7 @@
 ## 関連
 
 - [pillar](../README.md) · [roadmap](../roadmap.md) · [plans 索引](./README.md)
-- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0 specs](../specs/tx/) · [v0.4.0 specs](../specs/recovery/) · [v0.5.0 specs](../specs/es4-server/) · [v0.6.0 specs/state](../specs/state/) · [完了注記](./v0.6.0/state-backend-extension.md)
+- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0 specs](../specs/tx/) · [v0.4.0 specs](../specs/recovery/) · [v0.5.0 specs](../specs/es4-server/) · [v0.6.0 specs/state](../specs/state/) · [完了注記](./v0.6.0/state-backend-extension.md) · [v0.7.0 E2E](./v0.7.0/e2e-object-recovery.md)
 
 ----
 

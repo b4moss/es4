@@ -10,11 +10,12 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 | `v0.3.0`（暫定） | Phase 2 — SQLite State | **実装完了**（specs へ移動済み。Git タグ `v0.3.0` 済み） | オンディスク SQLite State・Tx API・論理 entries Snapshot | [specs/state](./specs/state/) · [tx](./specs/tx/) · [snapshot](./specs/snapshot/) · [options](./specs/options/) |
 | `v0.4.0`（暫定） | Phase 3 — 外部 Recovery Storage | **実装完了**（specs へ移動済み。Git タグ `v0.4.0` 済み） | libSQL / S3互換 Object・世代 TTL | [specs/recovery](./specs/recovery/) · [options](./specs/options/) |
 | `v0.5.0`（暫定） | Phase 4 — Es4 Server | **実装完了**（specs へ移動済み。Git タグ `v0.5.0` 済み） | HTTP Es4 Server・Docker・Health（末尾 `/` なし） | [specs/es4-server](./specs/es4-server/) |
-| `v0.6.0`（暫定） | Phase 5 — State Backend の拡張 | **実装完了**（Adapter 境界は specs/state へ反映。Git タグは未打） | コアを特定 Backend に依存させず Adapter 境界を正本化 | [specs/state](./specs/state/) · [plans/v0.6.0](./plans/v0.6.0/) |
+| `v0.6.0`（暫定） | Phase 5 — State Backend の拡張 | **実装完了**（Adapter 境界は specs/state へ反映。Git タグ `v0.6.0` 済み） | コアを特定 Backend に依存させず Adapter 境界を正本化 | [specs/state](./specs/state/) · [plans/v0.6.0](./plans/v0.6.0/) |
+| `v0.7.0`（暫定） | Phase 6 — E2E Object Recovery × RustFS | **実装完了**（E2E 仕様・Compose・`workflow_dispatch`。Git タグは未打） | RustFS 上で Snapshot Save → 再起動 Restore を自動化 | [tests/e2e](./tests/e2e/) · [plans/v0.7.0](./plans/v0.7.0/) |
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。
 
-プロダクト親論点は各 Phase の決定事項／現行 specs へ落とした。[plans/open-questions.md](./plans/open-questions.md) は**残件なし**。Phase 0: [scaffold](./plans/v0.1.0/scaffold.md#決定事項)、Phase 1: [state](./specs/state/) · [snapshot](./specs/snapshot/) · [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 2: [state](./specs/state/) · [tx](./specs/tx/) · [options](./specs/options/)、Phase 3: [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 4: [es4-server](./specs/es4-server/)、Phase 5: [state](./specs/state/)（[完了注記](./plans/v0.6.0/state-backend-extension.md)）。
+プロダクト親論点は各 Phase の決定事項／現行 specs へ落とした。[plans/open-questions.md](./plans/open-questions.md) は**残件なし**。Phase 0: [scaffold](./plans/v0.1.0/scaffold.md#決定事項)、Phase 1: [state](./specs/state/) · [snapshot](./specs/snapshot/) · [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 2: [state](./specs/state/) · [tx](./specs/tx/) · [options](./specs/options/)、Phase 3: [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 4: [es4-server](./specs/es4-server/)、Phase 5: [state](./specs/state/)（[完了注記](./plans/v0.6.0/state-backend-extension.md)）、Phase 6: [e2e](./tests/e2e/)（[完了注記](./plans/v0.7.0/e2e-object-recovery.md)）。
 
 関連: [pillar](./README.md) · [plans 索引](./plans/README.md) · [open-questions](./plans/open-questions.md)
 

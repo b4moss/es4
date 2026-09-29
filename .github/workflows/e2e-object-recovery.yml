@@ -1,0 +1,52 @@
+# Object Recovery × RustFS E2E
+#
+# Manual only — do NOT add push / pull_request / schedule triggers.
+# Start from the GitHub Actions UI (workflow_dispatch).
+
+name: e2e-object-recovery
+
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/go/go.mod
+          cache-dependency-path: packages/go/go.sum
+
+      - name: Start RustFS
+        run: docker compose -f docker/e2e/docker-compose.yml up -d --wait
+
+      - name: Wait for RustFS health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:9000/health; then
+              echo "RustFS healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "RustFS did not become healthy"
+          docker compose -f docker/e2e/docker-compose.yml logs
+          exit 1
+
+      - name: Run E2E tests
+        env:
+          AWS_ACCESS_KEY_ID: es4e2eaccess
+          AWS_SECRET_ACCESS_KEY: es4e2esecretkey
+          ES4_E2E_S3_ENDPOINT: http://127.0.0.1:9000
+          ES4_E2E_S3_REGION: us-east-1
+        working-directory: packages/go
+        run: go test -tags=e2e ./... -count=1 -timeout 10m
+
+      - name: Tear down RustFS
+        if: always()
+        run: docker compose -f docker/e2e/docker-compose.yml down -v
