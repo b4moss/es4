@@ -24,21 +24,46 @@ import (
 // Recovery → Restore only — not SQLite durability.
 
 var (
-	e2eClient *e2e.Client
-	e2eCfg    e2e.Config
+	e2eClient       *e2e.Client
+	e2eCfg          e2e.Config
+	rustfsAvailable bool
 )
 
 func TestMain(m *testing.M) {
 	e2eCfg = e2e.ConfigFromEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	if err := e2e.WaitHealthy(ctx, e2eCfg.Endpoint); err != nil {
-		fmt.Fprintf(os.Stderr, "e2e: RustFS not reachable (%v)\n", err)
-		fmt.Fprintf(os.Stderr, "e2e: start with: docker compose -f docker/e2e/docker-compose.yml up -d\n")
-		os.Exit(1)
+	// Short probe first so File/Memory runs are not blocked ~60s when RustFS is down.
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	probeErr := e2e.WaitHealthy(probeCtx, e2eCfg.Endpoint)
+	probeCancel()
+	if probeErr != nil {
+		if os.Getenv("ES4_E2E_REQUIRE_RUSTFS") == "1" {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			err := e2e.WaitHealthy(ctx, e2eCfg.Endpoint)
+			cancel()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "e2e: RustFS not reachable (%v)\n", err)
+				fmt.Fprintf(os.Stderr, "e2e: start with: docker compose -f docker/e2e/docker-compose.yml up -d\n")
+				os.Exit(1)
+			}
+			rustfsAvailable = true
+			e2eClient = e2e.NewClient(e2eCfg)
+		} else {
+			fmt.Fprintf(os.Stderr, "e2e: RustFS not reachable (%v); Object Recovery tests will skip\n", probeErr)
+			fmt.Fprintf(os.Stderr, "e2e: start with: docker compose -f docker/e2e/docker-compose.yml up -d\n")
+			rustfsAvailable = false
+		}
+	} else {
+		rustfsAvailable = true
+		e2eClient = e2e.NewClient(e2eCfg)
 	}
-	e2eClient = e2e.NewClient(e2eCfg)
 	os.Exit(m.Run())
+}
+
+func requireRustFS(t *testing.T) {
+	t.Helper()
+	if !rustfsAvailable {
+		t.Skip("RustFS not available; start docker/e2e or set ES4_E2E_REQUIRE_RUSTFS=1 in object CI")
+	}
 }
 
 // fixture prepares a unique bucket+prefix, clears at start, and registers
@@ -52,6 +77,7 @@ type fixture struct {
 
 func newFixture(t *testing.T, caseName string) *fixture {
 	t.Helper()
+	requireRustFS(t)
 	ctx := context.Background()
 	f := &fixture{
 		t:      t,
@@ -92,15 +118,15 @@ func (f *fixture) open(ctx context.Context) *es4.DB {
 		f.t.Fatalf("NewObject: %v", err)
 	}
 	opts := options.Options{
-		RecoveryBackend:   options.RecoveryBackendObject,
-		RecoveryS3Bucket:  f.bucket,
-		RecoveryS3Prefix:  f.prefix,
-		RecoveryS3Region:  e2eCfg.Region,
+		RecoveryBackend:    options.RecoveryBackendObject,
+		RecoveryS3Bucket:   f.bucket,
+		RecoveryS3Prefix:   f.prefix,
+		RecoveryS3Region:   e2eCfg.Region,
 		RecoveryS3Endpoint: e2eCfg.Endpoint,
-		RestoreOnStartup:  true,
-		MemoryOnly:        false,
-		StatePath:         "", // Memory State; Recovery proves restart restore
-		SnapshotInterval:  0,  // explicit SnapshotNow only
+		RestoreOnStartup:   true,
+		MemoryOnly:         false,
+		StatePath:          "", // Memory State; Recovery proves restart restore
+		SnapshotInterval:   0,  // explicit SnapshotNow only
 	}
 	db, err := es4.OpenWith(ctx, es4.OpenConfig{
 		Options:          opts,
@@ -161,10 +187,10 @@ func TestE2E_ObjectRecovery_MultiKeyHierarchy(t *testing.T) {
 
 	db1 := f.open(ctx)
 	want := map[string]json.RawMessage{
-		"plain":     json.RawMessage(`"a"`),
-		"a/b/c":     json.RawMessage(`{"deep":true}`),
-		"x/y":       json.RawMessage(`[1,2,3]`),
-		"solo":      json.RawMessage(`42`),
+		"plain": json.RawMessage(`"a"`),
+		"a/b/c": json.RawMessage(`{"deep":true}`),
+		"x/y":   json.RawMessage(`[1,2,3]`),
+		"solo":  json.RawMessage(`42`),
 	}
 	for k, v := range want {
 		if err := db1.Set(ctx, k, v); err != nil {
