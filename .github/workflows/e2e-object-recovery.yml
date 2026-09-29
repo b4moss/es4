@@ -1,7 +1,7 @@
-# Object Recovery × RustFS E2E
+# Object Recovery × RustFS E2E (legacy alias)
 #
-# Manual only — do NOT add push / pull_request / schedule triggers.
-# Start from the GitHub Actions UI (workflow_dispatch).
+# Prefer `.github/workflows/e2e.yml` with input layer=object|all|file|memory.
+# This workflow remains for older bookmarks; still workflow_dispatch ONLY.
 
 name: e2e-object-recovery
 
@@ -38,14 +38,15 @@ jobs:
           docker compose -f docker/e2e/docker-compose.yml logs
           exit 1
 
-      - name: Run E2E tests
+      - name: Run Object Recovery E2E
         env:
           AWS_ACCESS_KEY_ID: es4e2eaccess
           AWS_SECRET_ACCESS_KEY: es4e2esecretkey
           ES4_E2E_S3_ENDPOINT: http://127.0.0.1:9000
           ES4_E2E_S3_REGION: us-east-1
+          ES4_E2E_REQUIRE_RUSTFS: "1"
         working-directory: packages/go
-        run: go test -tags=e2e ./... -count=1 -timeout 10m
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_ObjectRecovery_' -count=1 -timeout 10m
 
       - name: Tear down RustFS
         if: always()

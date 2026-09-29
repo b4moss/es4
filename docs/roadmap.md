@@ -12,10 +12,11 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 | `v0.5.0`（暫定） | Phase 4 — Es4 Server | **実装完了**（specs へ移動済み。Git タグ `v0.5.0` 済み） | HTTP Es4 Server・Docker・Health（末尾 `/` なし） | [specs/es4-server](./specs/es4-server/) |
 | `v0.6.0`（暫定） | Phase 5 — State Backend の拡張 | **実装完了**（Adapter 境界は specs/state へ反映。Git タグ `v0.6.0` 済み） | コアを特定 Backend に依存させず Adapter 境界を正本化 | [specs/state](./specs/state/) · [plans/v0.6.0](./plans/v0.6.0/) |
 | `v0.7.0`（暫定） | Phase 6 — E2E Object Recovery × RustFS | **実装完了**（E2E 仕様・Compose・`workflow_dispatch`。Git タグは未打） | RustFS 上で Snapshot Save → 再起動 Restore を自動化 | [tests/e2e](./tests/e2e/) · [plans/v0.7.0](./plans/v0.7.0/) |
+| `v0.7.1`（暫定） | Phase 6 追補 — E2E 三層 | **実装完了**（File SQLite／In-memory・`e2e.yml` layer。Git タグは未打） | 共通カタログに沿い File／Memory 層を追加（S3 §5 は維持） | [tests/e2e](./tests/e2e/) · [plans/v0.7.1](./plans/v0.7.1/) |
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。
 
-プロダクト親論点は各 Phase の決定事項／現行 specs へ落とした。[plans/open-questions.md](./plans/open-questions.md) は**残件なし**。Phase 0: [scaffold](./plans/v0.1.0/scaffold.md#決定事項)、Phase 1: [state](./specs/state/) · [snapshot](./specs/snapshot/) · [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 2: [state](./specs/state/) · [tx](./specs/tx/) · [options](./specs/options/)、Phase 3: [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 4: [es4-server](./specs/es4-server/)、Phase 5: [state](./specs/state/)（[完了注記](./plans/v0.6.0/state-backend-extension.md)）、Phase 6: [e2e](./tests/e2e/)（[完了注記](./plans/v0.7.0/e2e-object-recovery.md)）。
+プロダクト親論点は各 Phase の決定事項／現行 specs へ落とした。[plans/open-questions.md](./plans/open-questions.md) は**残件なし**。Phase 0: [scaffold](./plans/v0.1.0/scaffold.md#決定事項)、Phase 1: [state](./specs/state/) · [snapshot](./specs/snapshot/) · [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 2: [state](./specs/state/) · [tx](./specs/tx/) · [options](./specs/options/)、Phase 3: [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 4: [es4-server](./specs/es4-server/)、Phase 5: [state](./specs/state/)（[完了注記](./plans/v0.6.0/state-backend-extension.md)）、Phase 6: [e2e](./tests/e2e/)（[v0.7.0](./plans/v0.7.0/e2e-object-recovery.md) · [v0.7.1](./plans/v0.7.1/e2e-three-layer.md)）。
 
 関連: [pillar](./README.md) · [plans 索引](./plans/README.md) · [open-questions](./plans/open-questions.md)
 

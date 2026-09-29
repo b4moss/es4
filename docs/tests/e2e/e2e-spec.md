@@ -3,7 +3,7 @@
 正本のドメイン仕様: [`docs/specs/recovery/`](../../specs/recovery/) · [`docs/specs/snapshot/`](../../specs/snapshot/) · [`docs/specs/options/`](../../specs/options/) · [`docs/specs/state/`](../../specs/state/)。  
 本ファイルは es4 の **E2E（エンドツーエンド）** の思想・三層の役割分担・**共通シナリオ定義**、および現時点で実装済みの **S3 互換（RustFS）層**の手順と成功条件を定める。
 
-シナリオ別の正常系／異常系整理: [`scenarios.md`](./scenarios.md)（S3 互換 §5.1–§5.5 の検証基準に整合）。
+シナリオ別の正常系／異常系整理: [`scenarios.md`](./scenarios.md)（各層の検証基準に整合。S3 互換 §5.1–§5.5 の判定は変更しない）。
 
 ----
 
@@ -37,14 +37,14 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 
 | ID | 共通シナリオ（要約） | S3 互換 | ファイル SQLite | インメモリ |
 |----|----------------------|---------|-----------------|------------|
-| C1 | 保存 → 再起動 → リカバリ（Save 済みのみ戻る） | ○（§5.1） | ○（採用予定。ローカル path／File Recovery 等に写像） | — |
-| C2 | 複数キー／階層 | ○（§5.2） | ○（採用予定） | ○（再起動なし。起動後の複数キー基本操作に写像） |
-| C3 | 未保存は戻らない | ○（§5.3） | ○（採用予定） | — |
-| C4 | 空状態からの起動（欠落は空続行） | ○（§5.4） | ○（採用予定） | ○（再起動・Recovery なし。起動直後の空 State／基本操作に写像） |
-| C5 | 隔離リソースのクリーンアップ・冪等 | ○（§5.5） | ○（採用予定。作業ディレクトリ等） | ○（プロセス内／一時領域の後始末が必要なら最小限） |
+| C1 | 保存 → 再起動 → リカバリ（Save 済みのみ戻る） | ○（§5.1） | ○（§F.1） | — |
+| C2 | 複数キー／階層 | ○（§5.2） | ○（§F.2） | ○（§M.2。再起動なし。起動後の複数キー基本操作） |
+| C3 | 未保存は戻らない | ○（§5.3） | ○（§F.3） | — |
+| C4 | 空状態からの起動（欠落は空続行） | ○（§5.4） | ○（§F.4） | ○（§M.4。再起動・Recovery なし。起動直後の空 State／基本操作） |
+| C5 | 隔離リソースのクリーンアップ・冪等 | ○（§5.5） | ○（§F.5。作業ディレクトリ等） | ○（§M.5。プロセス内 Clear／Close の冪等） |
 | C6 | TTL／世代（任意） | 任意（§5.6） | 任意 | — |
 
-ファイル SQLite／インメモリ層の **詳細手順・実装パス・専用 Compose** は、採用時に本ファイルへ追記する。追記時も共通 ID（C1–C6）との対応を保ち、S3 互換 §5 の文面は改変しない。
+ファイル SQLite／インメモリ層の手順・実装パスは §F・§M。共通 ID（C1–C6）との対応を保ち、**S3 互換 §5 の文面・判定基準は改変しない**。
 
 ----
 
@@ -55,12 +55,16 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 実装配置（v0.7.0）:
 - ハーネス: `packages/go/pkg/es4/object_recovery_e2e_test.go`（`//go:build e2e`）＋共有ヘルパ `packages/go/internal/e2e`
 - Compose: [`docker/e2e/docker-compose.yml`](../../../docker/e2e/docker-compose.yml)（README: [`docker/e2e/README.md`](../../../docker/e2e/README.md)）
-- CI: [`.github/workflows/e2e-object-recovery.yml`](../../../.github/workflows/e2e-object-recovery.yml)（**`workflow_dispatch` のみ**）
+- CI: [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml)（**`workflow_dispatch` のみ**・`layer` 入力）。レガシー別名: [`e2e-object-recovery.yml`](../../../.github/workflows/e2e-object-recovery.yml)
 
 必須検証コマンド:
 ```text
 # RustFS 起動後（docker compose -f docker/e2e/docker-compose.yml up -d）
+# 三層まとめて（Object は RustFS 必須。未起動時は Object のみ skip）
 cd packages/go && go test -tags=e2e ./... -count=1
+
+# Object のみ（CI は ES4_E2E_REQUIRE_RUSTFS=1 で未起動時 fail）
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_ObjectRecovery_' -count=1
 ```
 
 エンドポイント／認証（Compose 既定）:
@@ -218,35 +222,154 @@ E2E では **方式 A** に固定する。
 
 ----
 
-## 6. 非対象
+## F. ファイル SQLite 層（v0.7.1）
 
-- Redis／Valkey State Backend
-- ファイル SQLite層・インメモリ層の **未実装分**（共通定義と採用方針は §0。詳細手順は追記予定）
-- libSQL Recovery の E2E（別途必要なら共通カタログから採用を決める）
-- Es4 Server HTTP の E2E（本ファイルの S3 互換節はライブラリ Open／Recovery 経路。Server 経由は将来拡張）
-- 本番クラウド（AWS S3／GCS）への到達（RustFS ローカルで代替）
-- 負荷・性能 SLO
-- 認証・認可プロダクト機能
+ローカル永続ユーザー向け。共通カタログ **C1–C5** を `state_path` SQLite ＋ File Recovery（`recovery_backend=file` / `recovery_path`）に写像する。
+
+実装配置:
+- ハーネス: `packages/go/pkg/es4/file_sqlite_e2e_test.go`（`//go:build e2e`）
+- Compose: **不要**（ローカル temp ディレクトリのみ）
+- CI: [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `layer=file`（**`workflow_dispatch` のみ**）
+
+必須検証コマンド:
+```text
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_FileSQLite_' -count=1
+```
+
+### F.0 Options（Effective）と隔離
+
+| キー | E2E 推奨値 |
+|------|------------|
+| `state_path` | テスト用 temp 配下の SQLite ファイル |
+| `recovery_backend` | `file` |
+| `recovery_path` | テスト用 temp 配下の Recovery ファイル |
+| `restore_on_startup` | `true` |
+| `memory_only` | `false` |
+| `snapshot_interval` | `0`（明示 `SnapshotNow`） |
+
+- テストごと **独立 temp ディレクトリ**。開始時クリアと `t.Cleanup`（成功／失敗とも）で State／Recovery 成果物を削除する
+- **再起動の Recovery 証明:** Close 後に SQLite `state_path`（および WAL／SHM）を削除してから再 Open する。復元は **File Recovery → Restore** に依存する（S3 層が Memory State を使うのと同趣旨。SQLite ファイル耐久そのものは単体／統合側）
+- Save は `SnapshotNow` で明示（間隔任せにしない）
+
+### F.1 C1 — 保存 → 再起動 → リカバリ
+
+1. Open（SQLite State + File Recovery、`restore_on_startup=true`）
+2. State にキーを書く。Tx を使う場合は Commit まで
+3. `SnapshotNow` で File Recovery へ Save。Recovery ファイルが存在することを確認してよい
+4. Close → SQLite state ファイルを削除 → 同じ `recovery_path` で再 Open
+5. 手順 2 のキーを `Get` → 同じ JSON。Exists true
+
+期待: Save 済みのみが File Recovery 経由で戻る。
+
+### F.2 C2 — 複数キー／階層
+
+- 複数キー（単一セグメントと `a/b/c` 等）を Save 後、§F.0 の再起動手順ですべて戻る
+
+### F.3 C3 — 未保存は戻らない
+
+1. Open → Set するが **SnapshotNow しない**
+2. Close → state 削除 → 再 Open
+3. 当該キーは `ErrNotFound`。Recovery ファイルは存在しない
+
+### F.4 C4 — 空状態からの起動
+
+1. Recovery／State が空の temp で Open
+2. 起動成功・State 空（欠落は空続行）
+
+### F.5 C5 — クリーンアップ・冪等
+
+1. Save 済みのあとに fixture clear を実行
+2. 同じパスで clear を再実行してもエラーにならない（冪等）
 
 ----
 
-## 7. 成功条件（S3 互換層）
+## M. インメモリ層（v0.7.1）
+
+永続化を期待しないユーザー向け。共通カタログ **C2・C4・C5** のみ（C1／C3 の再起動復元は採用しない）。
+
+実装配置:
+- ハーネス: `packages/go/pkg/es4/memory_e2e_test.go`（`//go:build e2e`）
+- Compose: **不要**
+- CI: [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `layer=memory`
+
+必須検証コマンド:
+```text
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1
+```
+
+### M.0 Options
+
+| キー | E2E 推奨値 |
+|------|------------|
+| `memory_only` | `true`（Recovery／`state_path` は Effective で無視） |
+| `snapshot_interval` | `0` |
+
+フローは **Open → 基本操作**。プロセス再起動後の復元は検証しない。実ランタイム上でクライアント／ライブラリ結合を確認することが目的。
+
+### M.2 C2 — 複数キー／階層（再起動なし）
+
+1. Open（`memory_only`）
+2. 複数キーを `Set`（Tx Commit 含む場合あり）
+3. 同一プロセス内で全キーを `Get` → 投入時と同一
+
+### M.4 C4 — 空状態からの起動＋基本操作
+
+1. Open → State 空を確認
+2. 基本的な `Set`／`Get` が成功する
+
+### M.5 C5 — クリーンアップ・冪等（最小）
+
+1. `Clear` を 2 回実行してもエラーにならない
+2. `Close` の再呼び出しがエラーにならない（冪等）
+
+----
+
+## 6. 非対象
+
+- Redis／Valkey State Backend
+- libSQL Recovery の E2E（別途必要なら共通カタログから採用を決める）
+- Es4 Server HTTP の E2E（本ファイルはライブラリ Open／Recovery 経路。Server 経由は将来拡張）
+- 本番クラウド（AWS S3／GCS）への到達（RustFS ローカルで代替）
+- 負荷・性能 SLO
+- 認証・認可プロダクト機能
+- push／pull_request 自動 CI（E2E は手動 `workflow_dispatch` のみ）
+
+----
+
+## 7. 成功条件
+
+### S3 互換層
 
 - §5.1・§5.2・§5.3・§5.4・§5.5 を自動化テストとして実装し、RustFS 起動下で PASS
 - 失敗したランのあとも、次ランの開始時クリアでゼロからやり直せる
 - 仕様どおり **Recovery に Save 済みの内容のみ**が再起動後に戻る旨が、本ファイルとテスト名／コメントで一致している
 - S3 アクセスは共有ヘルパ＋クライアント差し替えに閉じ、ケース本体が薄いこと
 
+### ファイル SQLite層
+
+- §F.1–§F.5（C1–C5）が `go test -tags=e2e` で PASS（RustFS 不要）
+- temp 隔離と clear 冪等が担保されている
+
+### インメモリ層
+
+- §M.2・§M.4・§M.5（C2／C4／C5）が `go test -tags=e2e` で PASS（RustFS 不要）
+- 再起動復元を成功条件に含めない
+
+### 横断
+
+- RustFS 起動下で `cd packages/go && go test -tags=e2e ./... -count=1` が三層とも PASS
+- CI は [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `workflow_dispatch`（`layer` 入力）のみ
+
 ----
 
 ## 8. 関連
 
-- シナリオ別テスト仕様（正常系／異常系・S3 互換 §5.1–§5.5）: [`docs/tests/e2e/scenarios.md`](./scenarios.md)
+- シナリオ別テスト仕様: [`docs/tests/e2e/scenarios.md`](./scenarios.md)
 - Recovery: [`docs/specs/recovery/recovery.md`](../../specs/recovery/recovery.md)
-- Options（`recovery_s3_*`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
+- Options（`recovery_s3_*`／`state_path`／`memory_only`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
 - Snapshot: [`docs/specs/snapshot/`](../../specs/snapshot/)
 - 単体に近い Object テスト: `packages/go/internal/recovery/object_test.go`（本 E2E とは別。フェイク）
-- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md)
+- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md) · [`docs/plans/v0.7.1/e2e-three-layer.md`](../../plans/v0.7.1/e2e-three-layer.md)
 
 ----
 

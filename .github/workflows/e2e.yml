@@ -1,0 +1,97 @@
+# E2E (three layers) — Object / File SQLite / Memory
+#
+# Manual only — do NOT add push / pull_request / schedule triggers.
+# Start from the GitHub Actions UI (workflow_dispatch).
+#
+# Input `layer`:
+#   - all     : RustFS + full `go test -tags=e2e ./...`
+#   - object  : RustFS + Object Recovery tests only (strict RustFS required)
+#   - file    : File SQLite layer only (no RustFS)
+#   - memory  : In-memory layer only (no RustFS)
+#
+# Legacy workflow file `e2e-object-recovery.yml` remains as a thin alias
+# that runs layer=object for bookmarks / older docs.
+
+name: e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      layer:
+        description: E2E layer to run
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - object
+          - file
+          - memory
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/go/go.mod
+          cache-dependency-path: packages/go/go.sum
+
+      - name: Start RustFS
+        if: inputs.layer == 'all' || inputs.layer == 'object'
+        run: docker compose -f docker/e2e/docker-compose.yml up -d --wait
+
+      - name: Wait for RustFS health
+        if: inputs.layer == 'all' || inputs.layer == 'object'
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:9000/health; then
+              echo "RustFS healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "RustFS did not become healthy"
+          docker compose -f docker/e2e/docker-compose.yml logs
+          exit 1
+
+      - name: Run E2E — all layers
+        if: inputs.layer == 'all'
+        env:
+          AWS_ACCESS_KEY_ID: es4e2eaccess
+          AWS_SECRET_ACCESS_KEY: es4e2esecretkey
+          ES4_E2E_S3_ENDPOINT: http://127.0.0.1:9000
+          ES4_E2E_S3_REGION: us-east-1
+          ES4_E2E_REQUIRE_RUSTFS: "1"
+        working-directory: packages/go
+        run: go test -tags=e2e ./... -count=1 -timeout 10m
+
+      - name: Run E2E — object (S3 / RustFS)
+        if: inputs.layer == 'object'
+        env:
+          AWS_ACCESS_KEY_ID: es4e2eaccess
+          AWS_SECRET_ACCESS_KEY: es4e2esecretkey
+          ES4_E2E_S3_ENDPOINT: http://127.0.0.1:9000
+          ES4_E2E_S3_REGION: us-east-1
+          ES4_E2E_REQUIRE_RUSTFS: "1"
+        working-directory: packages/go
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_ObjectRecovery_' -count=1 -timeout 10m
+
+      - name: Run E2E — file SQLite
+        if: inputs.layer == 'file'
+        working-directory: packages/go
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_FileSQLite_' -count=1 -timeout 10m
+
+      - name: Run E2E — memory
+        if: inputs.layer == 'memory'
+        working-directory: packages/go
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1 -timeout 10m
+
+      - name: Tear down RustFS
+        if: always() && (inputs.layer == 'all' || inputs.layer == 'object')
+        run: docker compose -f docker/e2e/docker-compose.yml down -v
