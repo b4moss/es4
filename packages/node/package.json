@@ -1,9 +1,23 @@
 {
   "name": "@b4moss/es4",
-  "version": "0.9.0-dev",
-  "private": true,
+  "version": "0.9.0",
   "description": "Es4 — embedded State store with pluggable Recovery (Node.js/TypeScript port of Go v0.8.0)",
   "type": "module",
+  "license": "MIT",
+  "author": "Bicycle for Mind LLC",
+  "homepage": "https://github.com/b4moss/es4/tree/main/packages/node",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b4moss/es4.git",
+    "directory": "packages/node"
+  },
+  "bugs": {
+    "url": "https://github.com/b4moss/es4/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -21,6 +35,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
@@ -39,10 +54,12 @@
     "ioredis": "^5.6.0",
     "yaml": "^2.7.0"
   },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.8.1"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.10",
-    "better-sqlite3": "^11.8.1",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9"
   }

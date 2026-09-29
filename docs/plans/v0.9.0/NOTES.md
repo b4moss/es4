@@ -1,6 +1,6 @@
 # v0.9.0 Node port — completion notes (draft)
 
-実装: `packages/node`（`@b4moss/es4` private）  
+実装: `packages/node`（`@b4moss/es4` **v0.9.0**）  
 正本契約: Go tag `v0.8.0`
 
 ## Included
@@ -21,4 +21,4 @@ npm test
 npm run test:e2e:memory   # etc.
 ```
 
-SemVer tag `v0.9.0` is **not** cut in this draft PR.
+SemVer tag `v0.9.0` marks the Node port commit. npm publish uses `.github/workflows/publish-npm.yml` (Trusted Publisher on `release`; one-shot first create via `workflow_dispatch` + `NPM_TOKEN`).

@@ -13,7 +13,7 @@
 
 プロダクト知識は **[`docs/`](./docs/)**（OKF）にあります。このルート README はインストールと使い方の**日本語入口**です（英語版が正本）。詳細な仕様と計画は `docs/` に置きます。
 
-現行モノレポのライン: **Git タグ `v0.8.0`**（Go ライブラリ）。Node.js／TypeScript 移植は **`packages/node`**（v0.9.0。workspace private。npm 公開は未実施）。
+現行モノレポのライン: **Git タグ `v0.8.0`**（Go ライブラリ）。Node.js／TypeScript 移植は **`packages/node`**（npm の `@b4moss/es4` **v0.9.0**）。
 
 ## Purpose（目的）
 
@@ -45,7 +45,6 @@
 
 **対象外／未実装:**
 
-- `@b4moss/es4` の npm 公開（指示があるまで workspace private）
 - プロダクト E2E におけるリモート Turso（`libsql://`）
 - 本番 GCP 必須の Firestore E2E（Emulator のみ）
 - 公開 `SnapshotNow` API（明示フラッシュは**テスト用ヘルパ**のみ）
@@ -86,7 +85,13 @@ go run ./cmd/es4-server
 
 ### Node.js / TypeScript（`packages/node`）
 
-**要件:** Node.js **20+**。workspace private パッケージ `@b4moss/es4`（[`packages/node/README.md`](./packages/node/README.md)）。
+**要件:** Node.js **20+**。パッケージ: [`@b4moss/es4`](https://www.npmjs.com/package/@b4moss/es4)（[`packages/node/README.md`](./packages/node/README.md)）。
+
+```bash
+npm install @b4moss/es4
+```
+
+クローンから:
 
 ```bash
 cd packages/node
