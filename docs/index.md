@@ -20,6 +20,8 @@ okf_version: "0.1"
 * [plans](plans/) - これからやる内容
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
 * [plans/v0.2.0/minimal-core.md](plans/v0.2.0/minimal-core.md) - Phase 1 最小構成（決定事項含む）
-* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（優先度順）
+* [plans/v0.3.0/sqlite-state.md](plans/v0.3.0/sqlite-state.md) - Phase 2 SQLite State（決定事項含む）
+* [plans/v0.4.0/external-recovery.md](plans/v0.4.0/external-recovery.md) - Phase 3 外部 Recovery（Adapter 順含む）
+* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（Phase 3 以降）
 * [specs](specs/) - 現行機能の仕様正本（現状なし）
 * [tests](tests/) - テスト仕様（現状なし）

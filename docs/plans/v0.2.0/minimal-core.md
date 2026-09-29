@@ -15,7 +15,7 @@ State → Snapshot → Recovery という Es4 の基本ライフサイクルを�
 - ファイルベースの Recovery Storage
 - Snapshot / Restore
 - スナップショット間隔の設定
-- 明示的なスナップショット取得
+- 明示的なスナップショット取得（公開 API ではない）
 - 起動時の復元
 - 永続化なしの Memory-only モード
 
@@ -40,6 +40,11 @@ PO Q&A で確定した Phase 1（`v0.2.0` 暫定）の事実。実装詳細（�
 - **正本:** Options（ライブラリへの渡し方のソース・オブ・トゥルース）
 - **任意:** 設定ファイルも読める（Options を補う入力。正本は Options）
 - **概念名と既定:** ライブラリ Options と、後の Server 環境変数は**同じ概念名・同じ既定**を共有する（Phase 4 の命名を拘束する）
+- **キー名:** `snake_case`
+- **主な既定:**
+  - `snapshot_interval` … **30 秒**
+  - `restore_on_startup` … **on**（起動時復元する）
+  - `memory_only` … **off**
 - **Recovery ファイルパス:** Options で指定する
 - **Memory-only:** Recovery 関連設定（パス・間隔など）は無視して続行する（設定エラーにはしない）
 
@@ -50,7 +55,9 @@ PO Q&A で確定した Phase 1（`v0.2.0` 暫定）の事実。実装詳細（�
 - **ファイル Recovery（Phase 1）:** 単一ファイルの上書き
 - **起動時:** Recovery が無い／読めない場合は空 State で続行する
 - **Ready:** Restore 完了前でも State API を受け付ける
-- **明示 Snapshot:** 取得すると定期 Snapshot の間隔タイマーをリセットする
+- **明示 Snapshot:** **公開 API にはしない**（内部／定期ライフサイクル側。公開面は State API のみの方針と整合）
+- **明示 Snapshot（内部）:** 取得すると定期 Snapshot の間隔タイマーをリセットする
+- **クラッシュ一貫性:** 直近の**成功した** Snapshot／Recovery Point まで（それより新しい Current State の損失は許容）
 
 ### 並行
 
@@ -59,7 +66,7 @@ PO Q&A で確定した Phase 1（`v0.2.0` 暫定）の事実。実装詳細（�
 ## メモ
 
 - SemVer `v0.2.0` は暫定割当。正式版名が決まり次第フォルダと roadmap を更新する。
-- 詳細仕様（受け入れ条件・API・テスト方針）は実装直前に `仕様詳細` へ上げて詰める。残る未決は [open-questions](../open-questions.md)（設定キー一覧・既定の細部、明示 Snapshot の公開 API 扱い、クラッシュ一貫性の幅、Phase 2 以降など）。
+- 詳細仕様（受け入れ条件・API・テスト方針）は実装直前に `仕様詳細` へ上げて詰める。Phase 1 の親論点は閉じた。残る未決は [open-questions](../open-questions.md)（Phase 3 以降の固有項目など）。
 - 実装完了後は本ファイルを `docs/specs/` の対応ドメインへ**移動**する（plans に残さない）。
 - 関連: [roadmap](../../roadmap.md) · [pillar](../../README.md) · [open-questions](../open-questions.md)
 
