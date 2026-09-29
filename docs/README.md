@@ -134,7 +134,7 @@ flowchart LR
 
 ## 索引
 
-- [roadmap](./roadmap.md) — マイルストーン（Phase 1–5 / 暫定 SemVer）
+- [roadmap](./roadmap.md) — マイルストーン（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
 - [plans](./plans/) — これからやる内容
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（優先度順）
 - [wishlist](./wishlist.md) — PO メモ（未整理）

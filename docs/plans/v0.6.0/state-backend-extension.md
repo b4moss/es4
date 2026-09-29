@@ -1,6 +1,6 @@
 ---
 状態: 意図スタブ
-マイルストーン: v0.5.0（暫定 / Phase 5）
+マイルストーン: v0.6.0（暫定 / Phase 5）
 ---
 
 # Phase 5 — State Backend の拡張
@@ -18,7 +18,7 @@
 
 ## メモ
 
-- SemVer `v0.5.0` は暫定割当。Redis / Valkey Adapter は条件付き（ユースケース発生時）。
+- SemVer `v0.6.0` は暫定割当。Redis / Valkey Adapter は条件付き（ユースケース発生時）。
 - 詳細仕様は後日詰める。実装完了後は本ファイルを `docs/specs/` へ**移動**する。
 - 関連: [roadmap](../../roadmap.md)
 

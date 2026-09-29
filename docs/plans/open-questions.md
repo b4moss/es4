@@ -5,8 +5,9 @@
 
 # Open Questions（未決プロダクト論点）
 
-PO ビジョン（[`docs/README.md`](../README.md) · [`roadmap.md`](../roadmap.md) · [`plans/v0.1.0`](./v0.1.0/)–[`v0.5.0`](./v0.5.0/)）から読み取れるが、**まだ決めていない**プロダクト論点の一覧。  
-確定した事実はここに書かない。選択肢は既存 docs から読み取れる範囲に限る。
+PO ビジョン（[`docs/README.md`](../README.md) · [`roadmap.md`](../roadmap.md) · [`plans/v0.1.0`](./v0.1.0/)–[`v0.6.0`](./v0.6.0/)）から読み取れるが、**まだ決めていない**プロダクト論点の一覧。  
+確定した事実はここに書かない。選択肢は既存 docs から読み取れる範囲に限る。  
+なお Phase 1（最小構成）のプロダクト作業は暫定 SemVer **`v0.2.0`** 配下（`v0.1.0` はスキャフォールド専用）。
 
 ## 並べ方
 
@@ -17,7 +18,7 @@ PO ビジョン（[`docs/README.md`](../README.md) · [`roadmap.md`](../roadmap.
 |------|------|
 | **アンロック** | これを決めると何が進む／何が拘束されるか |
 | **選択肢** | 既存 docs から読み取れる候補のみ（無い場合は省略） |
-| **Phase** | `1` = Phase 1（`v0.1.0` 暫定）で深く決める必要 / `後続` = Phase 2 以降 |
+| **Phase** | `1` = Phase 1（`v0.2.0` 暫定）で深く決める必要 / `後続` = Phase 2 以降 |
 
 wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新し、本一覧から落とす。
 
@@ -170,7 +171,7 @@ wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新�
 
 ---
 
-### P9. 暫定 SemVer（`v0.1.0`–`v0.5.0`）の正式化方針
+### P9. 暫定 SemVer（`v0.1.0`–`v0.6.0`）の正式化方針
 
 **問い:** roadmap / plans の版号をいつ・何を条件に正式号へ固定するか。最初の Git タグ（versioning-rule）をどの成果物で打つか。
 
@@ -190,7 +191,7 @@ wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新�
 
 トップレベル P1–P8 が親。ここでは後続 Phase 固有の未決だけを Phase 内順位で列挙する。
 
-### Phase 2 — SQLite State（`v0.2.0` 暫定）
+### Phase 2 — SQLite State（`v0.3.0` 暫定）
 
 1. **「インメモリ SQLite」の具体と Snapshot 連携**  
    State の持ち方と「SQLite を利用したスナップショット」の関係（P4 の形式方針に従属）。  
@@ -204,7 +205,7 @@ wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新�
    P7 の Phase 1 約束を前提に、どこまで強めるか。  
    **アンロック:** SQLite State のロック／接続の設計。
 
-### Phase 3 — 外部 Recovery Storage（`v0.3.0` 暫定）
+### Phase 3 — 外部 Recovery Storage（`v0.4.0` 暫定）
 
 1. **外部 Adapter の実装順**  
    S3 互換オブジェクトストレージ / libSQL / Litestream 連携のどれを先に「使える」にするか。  
@@ -217,7 +218,7 @@ wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新�
 3. **GCS 等の位置づけ**  
    pillar 図は Object Storage に S3 / GCS を例示。Phase 3 範囲の「S3 互換」との関係（同一 Adapter か別か）は未決。
 
-### Phase 4 — Es4 Server（`v0.4.0` 暫定）
+### Phase 4 — Es4 Server（`v0.5.0` 暫定）
 
 1. **HTTP API の形（ライブラリ State API への写像）**  
    P1 が親。パス／メソッド／エラー表現はライブラリ契約に揃える前提で決める。  
@@ -234,7 +235,7 @@ wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新�
 4. **Cloud Run 固有の前提**  
    インスタンス寿命・ファイルシステム・外部 Recovery 必須かどうかなど、Phase 3 成果物との組み合わせ条件。
 
-### Phase 5 — State Backend の拡張（`v0.5.0` 暫定）
+### Phase 5 — State Backend の拡張（`v0.6.0` 暫定）
 
 1. **「その他」Backend の採択基準**  
    何が揃えばコアに載せるか（P2 の Adapter 契約を満たすこと以外の製品判断）。
@@ -256,7 +257,7 @@ wishlist（PO メモ）とは別物。決まったら該当 `plans/` を更新�
 ## 関連
 
 - [pillar](../README.md) · [roadmap](../roadmap.md) · [plans 索引](./README.md)
-- Phase plans: [v0.1.0](./v0.1.0/minimal-core.md) · [v0.2.0](./v0.2.0/sqlite-state.md) · [v0.3.0](./v0.3.0/external-recovery.md) · [v0.4.0](./v0.4.0/es4-server.md) · [v0.5.0](./v0.5.0/state-backend-extension.md)
+- Phase plans: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0](./v0.2.0/minimal-core.md) · [v0.3.0](./v0.3.0/sqlite-state.md) · [v0.4.0](./v0.4.0/external-recovery.md) · [v0.5.0](./v0.5.0/es4-server.md) · [v0.6.0](./v0.6.0/state-backend-extension.md)
 
 ----
 
