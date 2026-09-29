@@ -18,5 +18,6 @@ okf_version: "0.1"
 * [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 1–5 / 暫定 SemVer）
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容
+* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（優先度順）
 * [specs](specs/) - 現行機能の仕様正本（現状なし）
 * [tests](tests/) - テスト仕様（現状なし）

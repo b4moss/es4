@@ -15,7 +15,9 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。
 
-関連: [pillar](./README.md) · [plans 索引](./plans/README.md)
+未決のプロダクト論点（設定値・API・Adapter 境界など）は優先度順に [plans/open-questions.md](./plans/open-questions.md) へ集約する。Phase に入る前に親論点から潰す。
+
+関連: [pillar](./README.md) · [plans 索引](./plans/README.md) · [open-questions](./plans/open-questions.md)
 
 ----
 
