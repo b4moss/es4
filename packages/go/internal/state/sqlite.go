@@ -115,7 +115,7 @@ func (s *SQLite) Get(ctx context.Context, key string) (json.RawMessage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("state: sqlite get: %w", err)
 	}
-	return json.RawMessage(v), nil
+	return append(json.RawMessage(nil), v...), nil
 }
 
 func (s *SQLite) Delete(ctx context.Context, key string) error {
@@ -166,12 +166,15 @@ func (s *SQLite) Exists(ctx context.Context, key string) (bool, error) {
 	if s.closed {
 		return false, ErrClosed
 	}
-	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM kv WHERE key = ?`, key).Scan(&n)
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM kv WHERE key = ? LIMIT 1`, key).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("state: sqlite exists: %w", err)
 	}
-	return n > 0, nil
+	return true, nil
 }
 
 func (s *SQLite) Clear(ctx context.Context) error {
@@ -220,7 +223,8 @@ func (s *SQLite) Export(ctx context.Context) (map[string]json.RawMessage, error)
 		if err := rows.Scan(&k, &v); err != nil {
 			return nil, fmt.Errorf("state: sqlite export scan: %w", err)
 		}
-		out[k] = json.RawMessage(v)
+		// Deep copy: caller must not share backing bytes with the Store.
+		out[k] = append(json.RawMessage(nil), v...)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("state: sqlite export rows: %w", err)
@@ -367,7 +371,7 @@ func (t *sqliteTx) Get(ctx context.Context, key string) (json.RawMessage, error)
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx get: %w", err)
 		}
-		out = json.RawMessage(v)
+		out = append(json.RawMessage(nil), v...)
 		return nil
 	})
 	return out, err
@@ -399,12 +403,16 @@ func (t *sqliteTx) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	var ok bool
 	err := t.withLock(ctx, func() error {
-		var n int
-		err := t.tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM kv WHERE key = ?`, key).Scan(&n)
+		var one int
+		err := t.tx.QueryRowContext(ctx, `SELECT 1 FROM kv WHERE key = ? LIMIT 1`, key).Scan(&one)
+		if err == sql.ErrNoRows {
+			ok = false
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx exists: %w", err)
 		}
-		ok = n > 0
+		ok = true
 		return nil
 	})
 	return ok, err

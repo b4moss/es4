@@ -140,8 +140,8 @@ flowchart LR
 - [Phase 1 仕様](./specs/state/) — State / [Snapshot](./specs/snapshot/) / [Recovery](./specs/recovery/) / [Options](./specs/options/)（`v0.2.0` 実装完了・plans から移動済み）
 - [Phase 2 仕様](./specs/state/) — SQLite State / [Tx](./specs/tx/) / [Snapshot](./specs/snapshot/) / [Options](./specs/options/)（`v0.3.0` 実装完了・plans から移動済み）
 - [Phase 3 Recovery / Options](./specs/recovery/) — libSQL / Object・世代 TTL・GCS＝S3 互換
-- [Phase 4 仕様](./specs/es4-server/) — HTTP Es4 Server・Docker・Health（末尾 `/` なし。`v0.5.0` 実装完了・plans から移動済み）
-- [Phase 5 決定事項](./plans/v0.6.0/state-backend-extension.md#決定事項) — その他／Redis・Valkey Unscheduled・最適化境界
+- [Phase 4 仕様](./specs/es4-server/) — HTTP Es4 Server・Docker・Health（末尾 `/` なし。`v0.5.0` 実装完了・Git タグ済み・plans から移動済み）
+- [Phase 5 仕様](./specs/state/) — Adapter（`Store`）境界・Export deep copy・Replace 原子性・最適化境界（Redis／Valkey Unscheduled。`v0.6.0` 実装完了・[完了注記](./plans/v0.6.0/state-backend-extension.md)）
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（**残件なし**）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
 - [specs](./specs/) — 現行仕様

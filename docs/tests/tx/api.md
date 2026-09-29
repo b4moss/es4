@@ -5,7 +5,7 @@
 
 ### Begin / Commit / Rollback
 
-- Memory と SQLite の両方で同じ契約。
+- Memory と SQLite の両方で同じ契約（Store 契約テストの BeginTx→Commit も含む。正本: [`docs/specs/state/`](../../specs/state/)・[`docs/specs/tx/`](../../specs/tx/)）。
 
 #### テスト：正常系
 - Begin → SET → Commit 後、State GET で見える
@@ -18,6 +18,7 @@
 - ネスト Begin → エラー（`ErrNestedTx`）
 - Tx 上の欠落 GET/DELETE → `ErrNotFound`、EXISTS → false
 - `ErrInvalidKey` / `ErrInvalidValue` / context キャンセル
+- Store Close 後の BeginTx → `ErrClosed`（Store 契約テスト）
 
 ### 並行スモーク
 
