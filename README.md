@@ -9,7 +9,7 @@
 
 Embedded server-side state store with pluggable Recovery — for when you want durable in-process state without bringing in Redis/Valkey.
 
-- [日本語（短い案内）](./README_ja.md)
+- [日本語版](./README_ja.md)
 
 Product knowledge lives under **[`docs/`](./docs/)** (OKF). This root README is the canonical English entry for install and usage; deeper specs and plans stay in `docs/`.
 
