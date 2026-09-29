@@ -19,11 +19,11 @@ okf_version: "0.1"
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
-* [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（決定事項含む）
+* [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（実装完了・決定事項／完了注記）
 * [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
 * [specs](specs/) - 現行機能の仕様正本
 * [specs/options](specs/options/) - Options（設定）
-* [specs/state](specs/state/) - State API
+* [specs/state](specs/state/) - State API（Adapter 境界・Export／Replace・Phase 5）
 * [specs/tx](specs/tx/) - Tx API
 * [specs/snapshot](specs/snapshot/) - Snapshot（内部）
 * [specs/recovery](specs/recovery/) - Recovery（File / libSQL / Object・世代 TTL）

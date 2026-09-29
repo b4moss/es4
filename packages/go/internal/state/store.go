@@ -1,5 +1,18 @@
 // Package state defines the State Store adapter contract, in-memory and
 // on-disk SQLite implementations, and the Tx surface (separate from Store).
+//
+// Adapter boundary (Phase 5 / SemVer v0.6.0):
+//   - All backends share this Store (+ Tx) surface. Public pkg/es4 contracts
+//     must not grow backend-specific APIs.
+//   - Export returns a deep copy (caller mutations of the map or RawMessage
+//     bytes must not affect the Store; Store mutations must not mutate a
+//     previously returned Export map).
+//   - Replace is atomic: after success only the new entry set is observable;
+//     concurrent readers may block on locks but must not see a torn mix of
+//     old and new keys.
+//   - Internal optimizations of Memory / SQLite are allowed only when they
+//     preserve these shared semantics. Redis / Valkey / other backends remain
+//     Unscheduled (no Options keys, no client dependency).
 package state
 
 import (
@@ -19,7 +32,9 @@ var (
 	ErrClosed       = errors.New("state: closed")
 )
 
-// Store is the swappable State adapter surface.
+// Store is the swappable State adapter surface shared by Memory and SQLite
+// (and any future backend). Implementations must honor Export deep-copy,
+// Replace atomicity, and ErrClosed after Close. See package docs.
 type Store interface {
 	Set(ctx context.Context, key string, value json.RawMessage) error
 	Get(ctx context.Context, key string) (json.RawMessage, error)
@@ -27,11 +42,15 @@ type Store interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
 	// Export returns a deep copy of all entries (for Snapshot payload).
+	// The returned map and each RawMessage are independent of Store storage.
 	Export(ctx context.Context) (map[string]json.RawMessage, error)
 	// Replace atomically replaces all entries (for Restore).
+	// On success, only entries is visible; an empty map clears the Store.
 	Replace(ctx context.Context, entries map[string]json.RawMessage) error
 	// BeginTx starts a transaction. Nested Begin returns ErrNestedTx.
 	BeginTx(ctx context.Context) (Tx, error)
+	// Close releases resources. Subsequent Store ops return ErrClosed
+	// (or wrap it). Double Close is idempotent for Memory and SQLite.
 	Close() error
 }
 

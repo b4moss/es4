@@ -96,7 +96,7 @@ docker build -f docker/Dockerfile .
 
 ## 範囲外
 
-認証・認可、gRPC／WebSocket、LIST／scan、公開 Snapshot API、マルチレプリカ共有 State、Phase 5 Backend 拡張。
+認証・認可、gRPC／WebSocket、LIST／scan、公開 Snapshot API、マルチレプリカ共有 State。Redis／Valkey 等の追加 State Backend は Phase 5 でも **Unscheduled**（[`docs/specs/state/`](../state/)）。
 
 ## 関連
 

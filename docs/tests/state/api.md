@@ -1,7 +1,9 @@
 # State — テスト仕様
 
-公開 State API（`SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR`）のテスト仕様。  
+公開 State API（`SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR`）および Adapter 内部契約（Export／Replace／Close）のテスト仕様。  
 正本の振る舞い: [`docs/specs/state/`](../../specs/state/)。
+
+実装: `packages/go/internal/state`（`store_test.go` · `contract_test.go`）と公開面の既存スイート。
 
 ### Set / Get / Exists / Delete / Clear
 
@@ -14,15 +16,48 @@
 - `EXISTS` は存在するキーで `true`、欠落キーで `false`（エラーなし）
 - `CLEAR` は全消去する。空の State に対する `CLEAR` も成功する
 - 単一セグメント（`a`）と複数階層（`a/b/c`）のキーを扱える
+- 有効 JSON の `null`／配列／オブジェクト／数値／文字列は `SET` 可能
 
 #### テスト: 異常系
 - `GET` 欠落キー → エラー（`ErrNotFound`）
 - `DELETE` 欠落キー → エラー（`ErrNotFound`）
-- 空キー / 先頭 `/` / 末尾 `/` / 連続 `//` → `ErrInvalidKey`
-- 不正 JSON 値 → `ErrInvalidValue`
+- 空キー / 先頭 `/` / 末尾 `/` / 連続 `//` → `ErrInvalidKey`（Set／Get／Delete／Exists）
+- 不正 JSON 値（`nil`／空／構文不正）→ `ErrInvalidValue`
 - キャンセル済み `context` → `context` エラー
 
-### Memory / SQLite Export / Replace
+### Store 契約（テーブル駆動・Memory と SQLite 両方）
+
+同一テストテーブルを両 Backend で実行する（`contract_test.go`）。
+
+#### テスト：正常系
+- Set → Get → Exists true → Delete → Exists false → Get は `ErrNotFound`
+- Clear 後、投入キーの Exists が false。Export は空
+- Replace に複数 entries → 各キー Get 一致。旧キーは消える。空 Replace は全欠落
+- BeginTx → Set → Commit 後、外側 Get で見える
+
+#### テスト: 異常系
+- 両 Backend で無効キー／不正 JSON が同じ sentinel（`ErrInvalidKey`／`ErrInvalidValue`）
+
+### Export 独立性（deep copy）
+
+#### テスト：正常系
+- Export 後に返却 map のキー追加／削除や `RawMessage` 改変をしても、続けての Get／再 Export は元の Store 内容のまま
+- Store 側で Set し直しても、以前受け取った entries マップは自動では変わらない
+
+### Replace 原子性
+
+#### テスト：正常系
+- 事前キー `old` のあと `Replace({new})` 成功 → Get(new) 成功、Get(old) は `ErrNotFound`、Export は新集合のみ
+- 空 map で Replace → 全欠落（Clear 相当）
+- Replace 実行中の並行 Get／Export は、旧＋新の混在を公開しない（ロック待ち可）。完了後は新集合のみ
+
+### Close 後
+
+#### テスト: 異常系
+- Close 後の Set／Get／Delete／Exists／Clear／Export／Replace／BeginTx → `ErrClosed`（または wrap）
+- 二重 Close は Memory／SQLite とも冪等（エラーなし）
+
+### Memory / SQLite Export / Replace ラウンドトリップ
 
 - Snapshot / Restore 用のアダプタ内部 API。論理 `{entries}` 形式。
 
