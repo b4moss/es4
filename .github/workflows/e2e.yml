@@ -1,4 +1,4 @@
-# E2E (three layers) — Object / File SQLite / Memory
+# E2E (five layers) — Object / File SQLite / Memory / libSQL
 #
 # Manual only — do NOT add push / pull_request / schedule triggers.
 # Start from the GitHub Actions UI (workflow_dispatch).
@@ -8,6 +8,7 @@
 #   - object  : RustFS + Object Recovery tests only (strict RustFS required)
 #   - file    : File SQLite layer only (no RustFS)
 #   - memory  : In-memory layer only (no RustFS)
+#   - libsql  : libSQL Recovery (file-backed + in-memory) only (no RustFS)
 #
 # Legacy workflow file `e2e-object-recovery.yml` remains as a thin alias
 # that runs layer=object for bookmarks / older docs.
@@ -27,6 +28,7 @@ on:
           - object
           - file
           - memory
+          - libsql
 
 jobs:
   e2e:
@@ -91,6 +93,11 @@ jobs:
         if: inputs.layer == 'memory'
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1 -timeout 10m
+
+      - name: Run E2E — libSQL
+        if: inputs.layer == 'libsql'
+        working-directory: packages/go
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1 -timeout 10m
 
       - name: Tear down RustFS
         if: always() && (inputs.layer == 'all' || inputs.layer == 'object')
