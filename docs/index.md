@@ -25,5 +25,7 @@ okf_version: "0.1"
 * [plans/v0.5.0/es4-server.md](plans/v0.5.0/es4-server.md) - Phase 4 Es4 Server（決定事項含む）
 * [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（決定事項含む）
 * [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
-* [specs](specs/) - 現行機能の仕様正本（現状なし）
-* [tests](tests/) - テスト仕様（現状なし）
+* [specs](specs/) - 現行機能の仕様正本（Options など）
+* [specs/options](specs/options/) - Options（設定）仕様
+* [tests](tests/) - テスト仕様
+* [tests/options](tests/options/) - Options テスト仕様
