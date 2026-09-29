@@ -16,9 +16,9 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。最初の Git タグはスキャフォールド完了を条件に `v0.1.0`（[scaffold 決定事項](./plans/v0.1.0/scaffold.md#決定事項)）。
 
-未決のプロダクト論点は優先度順に [plans/open-questions.md](./plans/open-questions.md) へ集約する。Phase 1 で決まった事実は [plans/v0.2.0/minimal-core.md](./plans/v0.2.0/minimal-core.md#決定事項) を正とする。スキャフォールド／module path／最初のタグ方針は [plans/v0.1.0/scaffold.md](./plans/v0.1.0/scaffold.md#決定事項)。残る親論点（設定キー一覧・ライフサイクル残余など）から潰す。
+未決のプロダクト論点は優先度順に [plans/open-questions.md](./plans/open-questions.md) へ集約する（現状は Phase 3 以降の固有項目）。Phase 1 の事実は [plans/v0.2.0/minimal-core.md](./plans/v0.2.0/minimal-core.md#決定事項)、Phase 2 は [plans/v0.3.0/sqlite-state.md](./plans/v0.3.0/sqlite-state.md#決定事項)、Phase 3 Adapter 順は [plans/v0.4.0/external-recovery.md](./plans/v0.4.0/external-recovery.md#決定事項)。スキャフォールド／module path／最初のタグ方針は [plans/v0.1.0/scaffold.md](./plans/v0.1.0/scaffold.md#決定事項)。
 
-関連: [pillar](./README.md) · [plans 索引](./plans/README.md) · [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) · [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) · [open-questions](./plans/open-questions.md)
+関連: [pillar](./README.md) · [plans 索引](./plans/README.md) · [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) · [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) · [Phase 2 決定事項](./plans/v0.3.0/sqlite-state.md#決定事項) · [open-questions](./plans/open-questions.md)
 
 ----
 

@@ -36,7 +36,7 @@ flowchart TB
 
         subgraph STATE["State Store"]
             MEMJSON["Memory JSON"]
-            MEMSQL["Memory SQLite"]
+            FILESQL["File SQLite"]
             OTHER["Other State Backend"]
         end
 
@@ -137,8 +137,10 @@ flowchart LR
 - [roadmap](./roadmap.md) — マイルストーン（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
 - [plans](./plans/) — これからやる内容
 - [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) — スキャフォールド完了・module path・最初の Git タグ方針
-- [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) — State API・公開面・Recovery など（PO Q&A）
-- [open-questions](./plans/open-questions.md) — 未決プロダクト論点（優先度順）
+- [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) — State API・公開面・設定既定・Recovery など（PO Q&A）
+- [Phase 2 決定事項](./plans/v0.3.0/sqlite-state.md#決定事項) — オンディスク SQLite・Tx API・並行
+- [Phase 3 Adapter 順](./plans/v0.4.0/external-recovery.md#決定事項) — libSQL → S3 互換（Litestream Unscheduled）
+- [open-questions](./plans/open-questions.md) — 未決プロダクト論点（Phase 3 以降）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
 - [specs](./specs/) — 現行仕様（現状なし）
 - [tests](./tests/) — テスト仕様（現状なし）
