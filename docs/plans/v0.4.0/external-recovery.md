@@ -21,7 +21,7 @@ Recovery Storage をローカルファイルシステムから切り離し、外
 ## メモ
 
 - SemVer `v0.4.0` は暫定割当。詳細仕様は後日詰める。
-- Phase 1 のファイル Recovery は単一ファイル上書き（[決定事項](../v0.2.0/minimal-core.md#決定事項)）。本 Phase で世代管理・外部 Adapter へ広げる。
+- Phase 1 のファイル Recovery は単一ファイル上書き・パスは Options（[決定事項](../v0.2.0/minimal-core.md#決定事項)）。本 Phase で世代管理・外部 Adapter へ広げる。
 - 実装完了後は本ファイルを `docs/specs/` へ**移動**する。
 - 関連: [roadmap](../../roadmap.md) · [Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項)
 
