@@ -9,6 +9,68 @@
 ## アーキテクチャのイメージ(構想段階)
 
 ```mermaid
+flowchart TB
+    APP["Application"]
+
+    subgraph ES4["Es4"]
+        API["State API"]
+
+        subgraph STATE["State Store"]
+            MEMJSON["Memory JSON"]
+            MEMSQL["Memory SQLite"]
+            OTHER["Other State Backend"]
+        end
+
+        SNAP["Snapshot Manager"]
+
+        API --> STATE
+        STATE --> SNAP
+    end
+
+    APP --> API
+
+    subgraph RECOVERY["Recovery Storage"]
+        FILE["File"]
+        OBJECT["Object Storage\nS3 / GCS"]
+        LIBSQL["libSQL"]
+        OTHER_REC["Other Adapter"]
+    end
+
+    SNAP --> FILE
+    SNAP --> OBJECT
+    SNAP --> LIBSQL
+    SNAP --> OTHER_REC
+```
+
+## ライフサイクル
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Es4
+    participant State as State Store
+    participant Recovery as Recovery Storage
+
+    App->>Es4: SET / GET / DELETE
+    Es4->>State: Update / Read
+    State-->>Es4: Current State
+    Es4-->>App: Result
+
+    Note over Es4,Recovery: Snapshot interval
+
+    Es4->>State: Create Snapshot
+    State-->>Es4: Snapshot
+    Es4->>Recovery: Save Snapshot
+
+    Note over App,Recovery: Process / Instance failure
+
+    Es4->>Recovery: Load Snapshot
+    Recovery-->>Es4: Snapshot
+    Es4->>State: Restore
+    State-->>Es4: Ready
+```
+
+```mermaid
 flowchart LR
     STATE["Current State\n揮発してよい"]
     SNAP["Snapshot"]
