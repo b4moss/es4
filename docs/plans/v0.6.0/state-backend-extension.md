@@ -35,7 +35,7 @@ PO Q&A で確定した Phase 5（`v0.6.0` 暫定）の事実。実装詳細は `
 
 - SemVer `v0.6.0` は暫定割当。Redis / Valkey および「その他」コア追加は Unscheduled。
 - 詳細仕様は後日詰める。実装完了後は本ファイルを `docs/specs/` へ**移動**する。
-- 関連: [roadmap](../../roadmap.md) · [Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項) · [Phase 2 決定事項](../v0.3.0/sqlite-state.md#決定事項) · [open-questions](../open-questions.md)（残件なし）
+- 関連: [roadmap](../../roadmap.md) · [Phase 1 決定事項](../../specs/state/) · [Phase 2 決定事項](../v0.3.0/sqlite-state.md#決定事項) · [open-questions](../open-questions.md)（残件なし）
 
 ----
 

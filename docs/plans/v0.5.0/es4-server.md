@@ -31,7 +31,7 @@ PO Q&A で確定した Phase 4（`v0.5.0` 暫定）の事実。実装詳細は `
 
 - **接頭辞:** `ES4_`
 - **形:** SCREAMING_SNAKE（例: Options の `snapshot_interval` → `ES4_SNAPSHOT_INTERVAL`）
-- 概念名・既定はライブラリ Options と共有（[Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項)）
+- 概念名・既定はライブラリ Options と共有（[Phase 1 決定事項](../../specs/state/)）
 
 ### Health / Readiness
 
@@ -48,7 +48,7 @@ PO Q&A で確定した Phase 4（`v0.5.0` 暫定）の事実。実装詳細は `
 
 - SemVer `v0.5.0` は暫定割当。詳細仕様は後日詰める。
 - 実装完了後は本ファイルを `docs/specs/` へ**移動**する。
-- 関連: [roadmap](../../roadmap.md) · [Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項) · [Phase 3 決定事項](../v0.4.0/external-recovery.md#決定事項) · [open-questions](../open-questions.md)（残件なし）
+- 関連: [roadmap](../../roadmap.md) · [Phase 1 決定事項](../../specs/state/) · [Phase 3 決定事項](../v0.4.0/external-recovery.md#決定事項) · [open-questions](../open-questions.md)（残件なし）
 
 ----
 
