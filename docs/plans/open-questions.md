@@ -33,7 +33,7 @@
 ## 関連
 
 - [pillar](../README.md) · [roadmap](../roadmap.md) · [plans 索引](./README.md)
-- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0 specs](../specs/tx/) · [v0.4.0 specs](../specs/recovery/) · [v0.5.0 specs](../specs/es4-server/) · [v0.6.0 specs/state](../specs/state/) · [完了注記](./v0.6.0/state-backend-extension.md) · [v0.7.0 E2E](./v0.7.0/e2e-object-recovery.md)
+- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0 specs](../specs/tx/) · [v0.4.0 specs](../specs/recovery/) · [v0.5.0 specs](../specs/es4-server/) · [v0.6.0 specs/state](../specs/state/) · [完了注記](./v0.6.0/state-backend-extension.md) · [v0.7.0 E2E](./v0.7.0/e2e-object-recovery.md) · [v0.7.1 三層](./v0.7.1/e2e-three-layer.md)
 
 ----
 
