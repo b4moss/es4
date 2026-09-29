@@ -21,7 +21,9 @@ okf_version: "0.1"
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
 * [plans/v0.2.0/minimal-core.md](plans/v0.2.0/minimal-core.md) - Phase 1 最小構成（決定事項含む）
 * [plans/v0.3.0/sqlite-state.md](plans/v0.3.0/sqlite-state.md) - Phase 2 SQLite State（決定事項含む）
-* [plans/v0.4.0/external-recovery.md](plans/v0.4.0/external-recovery.md) - Phase 3 外部 Recovery（Adapter 順含む）
-* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（Phase 3 以降）
+* [plans/v0.4.0/external-recovery.md](plans/v0.4.0/external-recovery.md) - Phase 3 外部 Recovery（決定事項含む）
+* [plans/v0.5.0/es4-server.md](plans/v0.5.0/es4-server.md) - Phase 4 Es4 Server（決定事項含む）
+* [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（決定事項含む）
+* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
 * [specs](specs/) - 現行機能の仕様正本（現状なし）
 * [tests](tests/) - テスト仕様（現状なし）
