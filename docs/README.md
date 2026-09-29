@@ -3,7 +3,7 @@
 プロダクトの意味的な pillar 正本（目的・スコープ・技術方針のハブ）。  
 OKF の版索引は [`index.md`](./index.md)（`okf_version` のみ）。本文はここに書く。
 
-実装前の構想を含む。現行の振る舞い仕様は未着手のため [`specs/`](./specs/) は空。これからやる内容は [`roadmap.md`](./roadmap.md) と [`plans/`](./plans/) を参照。
+実装前の構想を含む。現行の振る舞い仕様は [`specs/`](./specs/)（Options など着地済みドメインから）。これからやる内容は [`roadmap.md`](./roadmap.md) と [`plans/`](./plans/) を参照。
 
 ## 目的・動機（開発の同期）
 
@@ -144,8 +144,8 @@ flowchart LR
 - [Phase 5 決定事項](./plans/v0.6.0/state-backend-extension.md#決定事項) — その他／Redis・Valkey Unscheduled・最適化境界
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（**残件なし**）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
-- [specs](./specs/) — 現行仕様（現状なし）
-- [tests](./tests/) — テスト仕様（現状なし）
+- [specs](./specs/) — 現行仕様（Options など）
+- [tests](./tests/) — テスト仕様
 - [憲章](./charter/) — 開発ルール
 
 ----
