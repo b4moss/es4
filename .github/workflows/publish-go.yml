@@ -1,0 +1,99 @@
+name: Publish Go
+
+# Makes github.com/b4moss/es4/packages/go discoverable when packages/go version is tagged.
+# Tag form: packages/go/vX.Y.Z (must match packages/go/VERSION).
+on:
+  push:
+    branches:
+      - release
+    tags:
+      - "packages/go/v*"
+
+concurrency:
+  group: publish-go-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: publish github.com/b4moss/es4/packages/go
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to publish
+        id: decide
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/should-publish-go.sh
+
+      - name: Setup Go
+        if: steps.decide.outputs.skip != 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: packages/go/go.mod
+          cache-dependency-path: packages/go/go.sum
+
+      - name: Vet
+        if: steps.decide.outputs.skip != 'true'
+        run: go vet ./...
+
+      - name: Test
+        if: steps.decide.outputs.skip != 'true'
+        run: go test ./...
+
+      - name: Create GitHub Release
+        if: steps.decide.outputs.skip != 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.decide.outputs.tag }}
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists: $TAG (skip create)"
+            exit 0
+          fi
+          if ! out="$(gh release create "$TAG" \
+            --title "Go module v${VERSION}" \
+            --notes "Go module \`github.com/b4moss/es4/packages/go\` v${VERSION}." \
+            --verify-tag 2>&1)"; then
+            echo "$out"
+            if echo "$out" | grep -qi 'already exists'; then
+              echo "Release appeared concurrently; treating as success."
+              exit 0
+            fi
+            exit 1
+          fi
+
+      # Always ping when we decided to publish — even if the Release already existed
+      # (release-on-tag race). Proxy indexing is the main publish outcome for Go.
+      - name: Ping Go module proxy
+        if: steps.decide.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          url="https://proxy.golang.org/github.com/b4moss/es4/packages/go/@v/v${VERSION}.info"
+          for i in 1 2 3 4 5; do
+            if curl -fsSL "$url"; then
+              echo
+              echo "proxy indexed v${VERSION}"
+              exit 0
+            fi
+            echo "proxy ping attempt ${i} failed; retrying in $((i * 5))s..."
+            sleep $((i * 5))
+          done
+          echo "proxy ping still failing after retries (tag may need a moment); release path completed."
+          exit 0

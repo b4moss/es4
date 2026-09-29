@@ -1,0 +1,66 @@
+name: CI
+
+# Unit CI for packages/go. Product E2E stays in e2e.yml (workflow_dispatch only).
+# Badge / Codecov upload runs only on main push.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/go/**"
+      - ".github/workflows/ci.yml"
+      - "codecov.yml"
+  pull_request:
+    branches:
+      - main
+      - develop
+      - "dev-v*"
+    paths:
+      - "packages/go/**"
+      - ".github/workflows/ci.yml"
+      - "codecov.yml"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: packages/go
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: packages/go/go.mod
+          cache-dependency-path: packages/go/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        if: github.event_name == 'pull_request'
+        run: go test ./...
+
+      - name: Test with coverage
+        if: github.event_name == 'push'
+        run: go test ./... -coverprofile=coverage.out
+
+      - name: Upload coverage to Codecov
+        if: github.event_name == 'push'
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: packages/go/coverage.out
+          disable_search: true
+          fail_ci_if_error: false

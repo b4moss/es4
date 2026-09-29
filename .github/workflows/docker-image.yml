@@ -1,0 +1,45 @@
+name: Docker image
+
+# PR build of es4-server image (repo-root context). Does not push.
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - "dev-v*"
+    paths:
+      - "docker/**"
+      - "packages/go/**"
+      - ".github/workflows/docker-image.yml"
+
+concurrency:
+  group: docker-image-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    name: build es4-server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE_TAG: es4-server:ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: ${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=es4-server
+          cache-to: type=gha,mode=max,scope=es4-server
