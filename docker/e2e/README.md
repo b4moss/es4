@@ -1,6 +1,6 @@
-# E2E Docker — RustFS / Redis / Valkey
+# E2E Docker — RustFS / Redis / Valkey / Firestore
 
-Object Recovery E2E（RustFS）および Redis／Valkey State Backend E2E 用 Compose。
+Object Recovery E2E（RustFS）、Redis／Valkey State Backend E2E、および Firestore Emulator State E2E 用 Compose。
 
 ## 起動
 
@@ -9,6 +9,7 @@ Object Recovery E2E（RustFS）および Redis／Valkey State Backend E2E 用 Co
 docker compose -f docker/e2e/docker-compose.yml up -d --wait rustfs
 docker compose -f docker/e2e/docker-compose.yml up -d --wait redis
 docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
+docker compose -f docker/e2e/docker-compose.yml up -d --wait firestore
 
 curl -sf http://127.0.0.1:9000/health
 ```
@@ -22,6 +23,8 @@ curl -sf http://127.0.0.1:9000/health
 | Region | `us-east-1`（ダミー可） |
 | Redis | `redis://127.0.0.1:6379/0` |
 | Valkey | `redis://127.0.0.1:6380/0` |
+| Firestore Emulator | `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` |
+| Firestore project | `demo-es4`（`ES4_E2E_FIRESTORE_PROJECT_ID`） |
 
 ## テスト
 
@@ -44,6 +47,11 @@ go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1
 
 export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
 go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1
+
+# Firestore（layer=all には含めない）
+export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+export ES4_E2E_FIRESTORE_PROJECT_ID=demo-es4
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_FirestoreState_' -count=1
 ```
 
 ## 停止
@@ -53,5 +61,5 @@ docker compose -f docker/e2e/docker-compose.yml down -v
 ```
 
 行動仕様の正本: [`docs/tests/e2e/e2e-spec.md`](../../docs/tests/e2e/e2e-spec.md)。
-GitHub Actions: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql|redis|valkey）。レガシー別名: `e2e-object-recovery.yml`。
-`layer=all` は redis／valkey サービスを起動しない（承認済み）。
+GitHub Actions: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql|redis|valkey|firestore）。レガシー別名: `e2e-object-recovery.yml`。
+`layer=all` は redis／valkey／firestore サービスを起動しない（承認済み）。

@@ -15,7 +15,7 @@ okf_version: "0.1"
 
 # Project Docs
 
-* [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 0–6 / 暫定 SemVer `v0.1.0`–`v0.7.3`）
+* [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 0–7 / 暫定 SemVer `v0.1.0`–`v0.8.0`）
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
@@ -24,6 +24,8 @@ okf_version: "0.1"
 * [plans/v0.7.1/e2e-three-layer.md](plans/v0.7.1/e2e-three-layer.md) - Phase 6 追補 E2E 三層（File／Memory・完了注記）
 * [plans/v0.7.2/github-actions.md](plans/v0.7.2/github-actions.md) - Phase 6 追補 GitHub Actions スイート（実装完了・完了注記）
 * [plans/v0.7.3/e2e-libsql.md](plans/v0.7.3/e2e-libsql.md) - Phase 6 追補 E2E libSQL Recovery（File／InMemory・完了注記）
+* [plans/v0.8.0/redis-valkey-state.md](plans/v0.8.0/redis-valkey-state.md) - Phase 7 Redis／Valkey State Backend（実装中・#29）
+* [plans/v0.8.0/firestore-state.md](plans/v0.8.0/firestore-state.md) - Phase 7 Firestore State Backend（実装中・#29 と共存）
 * [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
 * [specs](specs/) - 現行機能の仕様正本
 * [specs/options](specs/options/) - Options（設定）

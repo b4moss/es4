@@ -14,6 +14,7 @@ import (
 )
 
 // storeFactories drive the same Store contract against Memory, SQLite, and Redis.
+// Firestore is exercised in firestore_contract_test.go (emulator required).
 func storeFactories(t *testing.T) map[string]func(t *testing.T) state.Store {
 	t.Helper()
 	return map[string]func(t *testing.T) state.Store{

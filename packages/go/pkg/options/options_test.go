@@ -322,9 +322,12 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 		RecoveryS3Region:        "r",
 		RecoveryS3Endpoint:      "http://e",
 		StatePath:               "/should/ignore-state",
-		StateBackend:            "redis",
-		StateRedisURL:           "redis://127.0.0.1:6379/0",
-		StateRedisKeyPrefix:     "e2e/ignore/",
+		StateBackend:              "redis",
+		StateRedisURL:             "redis://127.0.0.1:6379/0",
+		StateRedisKeyPrefix:       "e2e/ignore/",
+		StateFirestoreProjectID:    "proj",
+		StateFirestoreDatabaseID:   "db",
+		StateFirestoreCollection:   "col",
 	}
 	eff := raw.Effective()
 	if eff.SnapshotInterval != 0 {
@@ -348,6 +351,9 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 	if eff.StateBackend != "" || eff.StateRedisURL != "" || eff.StateRedisKeyPrefix != "" {
 		t.Fatalf("state_backend/redis keys should be cleared: %#v", eff)
 	}
+	if eff.StateFirestoreProjectID != "" || eff.StateFirestoreCollection != "" {
+		t.Fatalf("firestore keys should be cleared: %#v", eff)
+	}
 	if !eff.MemoryOnly {
 		t.Fatal("memory_only must remain true")
 	}
@@ -368,17 +374,32 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 func TestEffective_MemoryOnlyOff(t *testing.T) {
 	t.Parallel()
 	raw := options.Options{
-		SnapshotInterval: 12 * time.Second,
-		RestoreOnStartup: false,
-		MemoryOnly:       false,
-		RecoveryPath:     "/keep",
-		StatePath:        "/keep-state",
+		SnapshotInterval:         12 * time.Second,
+		RestoreOnStartup:         false,
+		MemoryOnly:               false,
+		RecoveryPath:             "/keep",
+		StatePath:                "/keep-state",
+		StateFirestoreDatabaseID: "(default)",
 	}
 	if raw.Effective() != raw {
 		t.Fatalf("got %#v want %#v", raw.Effective(), raw)
 	}
 	if !raw.UsesRecovery() {
 		t.Fatal("UsesRecovery must be true when memory_only false")
+	}
+}
+
+func TestEffective_FirestoreDatabaseDefault(t *testing.T) {
+	t.Parallel()
+	raw := options.Options{StateBackend: "firestore", StateFirestoreProjectID: "p", StateFirestoreCollection: "c"}
+	eff := raw.Effective()
+	if eff.StateFirestoreDatabaseID != options.DefaultFirestoreDatabaseID {
+		t.Fatalf("got %q want %q", eff.StateFirestoreDatabaseID, options.DefaultFirestoreDatabaseID)
+	}
+	raw.StateFirestoreDatabaseID = "other-db"
+	eff = raw.Effective()
+	if eff.StateFirestoreDatabaseID != "other-db" {
+		t.Fatalf("got %q", eff.StateFirestoreDatabaseID)
 	}
 }
 
@@ -518,8 +539,29 @@ func TestValidate_StateBackend(t *testing.T) {
 	if err := (options.Options{StateBackend: "mongo"}).Validate(); err == nil {
 		t.Fatal("want error: unknown state_backend")
 	}
+	if err := (options.Options{StateBackend: "Firestore"}).Validate(); err == nil {
+		t.Fatal("want error: mixed case")
+	}
+	if err := (options.Options{StateBackend: "firestore"}).Validate(); err == nil {
+		t.Fatal("want error: firestore without project/collection")
+	}
+	if err := (options.Options{
+		StateBackend:             "firestore",
+		StateFirestoreProjectID:  "p",
+		StateFirestoreCollection: "a/b",
+	}).Validate(); err == nil {
+		t.Fatal("want error: slash in collection")
+	}
 	ok := options.Options{StateBackend: "redis", StateRedisURL: "redis://127.0.0.1:6379/0"}
 	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	okFS := options.Options{
+		StateBackend:             "firestore",
+		StateFirestoreProjectID:  "demo-es4",
+		StateFirestoreCollection: "es4_state",
+	}
+	if err := okFS.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	okMem := options.Options{StateBackend: "memory", StatePath: "/ignored.db"}
@@ -529,6 +571,33 @@ func TestValidate_StateBackend(t *testing.T) {
 	mo := options.Options{MemoryOnly: true, StateBackend: "redis"}
 	if err := mo.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	moFS := options.Options{MemoryOnly: true, StateBackend: "firestore"}
+	if err := moFS.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoad_StateFirestoreKeys(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "fs.yaml")
+	if err := os.WriteFile(path, []byte(`
+state_backend: firestore
+state_firestore_project_id: demo-es4
+state_firestore_database_id: custom-db
+state_firestore_collection: es4_state
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := options.FromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.StateBackend != "firestore" || got.StateFirestoreProjectID != "demo-es4" {
+		t.Fatalf("%#v", got)
+	}
+	if got.StateFirestoreDatabaseID != "custom-db" || got.StateFirestoreCollection != "es4_state" {
+		t.Fatalf("%#v", got)
 	}
 }
 
