@@ -23,6 +23,8 @@ B4MOSS 兄弟リポジトリ（median / crudian / d4run）に揃えた **標準 
 | `.github/scripts/should-publish-go.sh` | publish-go の skip / tag 判定 |
 | `packages/go/VERSION` | `0.7.1`（最終リリース済み SemVer に一致。本マイルストーンではタグを切らない） |
 | `.github/CI.md` | 単位 CI / E2E 手動の方針メモ |
+| `.github/dependabot.yml` | github-actions + gomod のみ（週次・major 除外・group） |
+| `codecov.yml` | informational coverage；E2E パスを ignore |
 
 ## 非対象
 
@@ -42,6 +44,9 @@ B4MOSS 兄弟リポジトリ（median / crudian / d4run）に揃えた **標準 
 | `should-publish-go.sh` | Decide skip/tag/version | b4moss/median / crudian script（module path → es4） |
 | `docker-image.yml` | PR build es4-server image (no push) | b4moss/crudian `docker-image.yml`（簡略・repo-root context） |
 | `packages/go/VERSION` | `0.7.1` for publish-go gate | median/crudian VERSION 慣習 |
+| `dependabot.yml` | Weekly Actions + Go module updates (no npm/composer) | b4moss/median `dependabot.yml`（Go-only subset） |
+| `codecov.yml` | Informational coverage; ignore e2e paths | b4moss/d4run `codecov.yml` |
+| `CI.md` | Unit CI vs manual E2E policy | b4moss/crudian / median CI.md 方針 |
 
 ## 決定事項
 
