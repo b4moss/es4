@@ -28,17 +28,17 @@ Current monorepo line: **Git tag `v0.7.3`** (Go library module path still `githu
 
 | Layer | Choices |
 |-------|---------|
-| State | Memory · on-disk SQLite (`state_path`) |
+| State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) |
 | Recovery | `file` · `libsql` (local) · `object` (S3-compatible) |
 | Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` · Tx: `BeginTx` → Commit/Rollback |
 | Server | HTTP Es4 Server + Docker image workflows |
-| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory (`workflow_dispatch`) |
+| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State (`workflow_dispatch`) |
 
 **Out of scope / not yet:**
 
 - Node.js / TypeScript port (`packages/node` is a stub)
 - Remote Turso (`libsql://`) in product E2E
-- Redis/Valkey State adapter (unscheduled)
+- Firestore State adapter (v0.8.0 follow-up PR)
 - Public `SnapshotNow` API (explicit flush exists only as a **test helper** in `export_test.go`)
 
 ## Install
@@ -193,25 +193,38 @@ es4.Open(ctx, options.Options{
 })
 ```
 
+**Redis / Valkey State** (same adapter; `valkey` is an alias)
+
+```go
+es4.Open(ctx, options.Options{
+    StateBackend:        options.StateBackendRedis, // or StateBackendValkey
+    StateRedisURL:       "redis://127.0.0.1:6379/0",
+    StateRedisKeyPrefix: "myapp/prod/", // optional; empty → HASH es4:state
+    SnapshotInterval:    0,             // or leave default if also using Recovery
+})
+```
+
 Optional: `recovery_ttl` (Go duration; `0` keeps only the latest generation), `recovery_libsql_auth_token` for authenticated DSN forms.
 
-### Product E2E — run the four workflow layers
+### Product E2E — run the workflow layers
 
 E2E is **manual only** (`.github/workflows/e2e.yml`, `workflow_dispatch`). Input `layer`:
 
-| `layer` | What runs | RustFS |
-|---------|-----------|--------|
-| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | Required |
-| `object` | `TestE2E_ObjectRecovery_*` | Required |
+| `layer` | What runs | Extra service |
+|---------|-----------|---------------|
+| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | RustFS required; Redis/Valkey skip unless URLs set |
+| `object` | `TestE2E_ObjectRecovery_*` | RustFS |
 | `file` | `TestE2E_FileSQLite_*` | No |
 | `memory` | `TestE2E_Memory_*` | No |
 | `libsql` | `TestE2E_LibSQL*` (File C1–C5 + Memory C2/C4/C5) | No |
+| `redis` | `TestE2E_RedisState_*` | Compose `redis` |
+| `valkey` | `TestE2E_ValkeyState_*` | Compose `valkey` |
 
 Local commands (from repo root / `packages/go`):
 
 ```bash
 # Object needs RustFS first
-docker compose -f docker/e2e/docker-compose.yml up -d --wait
+docker compose -f docker/e2e/docker-compose.yml up -d --wait rustfs
 export AWS_ACCESS_KEY_ID=es4e2eaccess
 export AWS_SECRET_ACCESS_KEY=es4e2esecretkey
 export ES4_E2E_S3_ENDPOINT=http://127.0.0.1:9000
@@ -228,6 +241,16 @@ go test -tags=e2e ./pkg/es4 -run 'TestE2E_FileSQLite_' -count=1 -timeout 10m
 
 # memory (no RustFS)
 go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1 -timeout 10m
+
+# Redis State
+docker compose -f docker/e2e/docker-compose.yml up -d --wait redis
+export ES4_E2E_REDIS_URL=redis://127.0.0.1:6379/0
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1 -timeout 10m
+
+# Valkey State
+docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
+export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1 -timeout 10m
 ```
 
 Compose defaults and cleanup: [`docker/e2e/README.md`](./docker/e2e/README.md). Behavior catalog: [`docs/tests/e2e/e2e-spec.md`](./docs/tests/e2e/e2e-spec.md).
@@ -240,6 +263,8 @@ Harness files (all `//go:build e2e`):
 | File SQLite | `packages/go/pkg/es4/file_sqlite_e2e_test.go` |
 | Memory | `packages/go/pkg/es4/memory_e2e_test.go` |
 | libSQL File / Memory | `libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go` |
+| Redis State | `redis_state_e2e_test.go` |
+| Valkey State | `valkey_state_e2e_test.go` |
 
 ### Writing / running libSQL E2E
 

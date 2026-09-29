@@ -64,9 +64,11 @@ type OpenConfig struct {
 // Open builds a DB from Options. Consumes opts.Effective().
 //
 // Backend selection (when State is not injected via OpenWith):
-//   - memory_only → Memory (state_path ignored)
-//   - state_path non-empty → on-disk SQLite
-//   - empty state_path → Memory (compat)
+//  1. memory_only → Memory (state_path / state_backend / redis ignored)
+//  2. state_backend=redis|valkey → Redis adapter (state_redis_url required)
+//  3. state_backend=memory → Memory
+//  4. state_path non-empty (or state_backend=sqlite) → on-disk SQLite
+//  5. empty state_path → Memory (compat)
 //
 // Recovery selection (when Recovery is not injected via OpenWith):
 //   - memory_only → no Recovery (settings ignored)
@@ -165,14 +167,27 @@ func open(ctx context.Context, cfg OpenConfig) (*DB, error) {
 }
 
 func openDefaultState(eff options.Options) (state.Store, error) {
-	if eff.MemoryOnly || eff.StatePath == "" {
+	if eff.MemoryOnly {
 		return state.NewMemory(), nil
 	}
-	st, err := state.OpenSQLite(eff.StatePath)
-	if err != nil {
-		return nil, fmt.Errorf("es4: open sqlite state: %w", err)
+	if eff.IsRedisStateBackend() {
+		st, err := state.OpenRedis(context.Background(), eff.StateRedisURL, eff.StateRedisKeyPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("es4: open redis state: %w", err)
+		}
+		return st, nil
 	}
-	return st, nil
+	if eff.StateBackend == options.StateBackendMemory {
+		return state.NewMemory(), nil
+	}
+	if eff.StatePath != "" || eff.StateBackend == options.StateBackendSQLite {
+		st, err := state.OpenSQLite(eff.StatePath)
+		if err != nil {
+			return nil, fmt.Errorf("es4: open sqlite state: %w", err)
+		}
+		return st, nil
+	}
+	return state.NewMemory(), nil
 }
 
 func (db *DB) restoreOnce(ctx context.Context) error {

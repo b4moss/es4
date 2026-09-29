@@ -5,7 +5,7 @@
 ## 概要
 
 JSON ドキュメントストア。公開面は State API と **別面の Tx API**（Snapshot / Recovery は内部）。  
-実装: `packages/go/pkg/es4`（入口）と `packages/go/internal/state`（Memory / SQLite アダプタ）。
+実装: `packages/go/pkg/es4`（入口）と `packages/go/internal/state`（Memory / SQLite / Redis・Valkey アダプタ）。
 
 ## 操作
 
@@ -44,36 +44,39 @@ State Adapter は差し替え可能。全 Backend が共有する内部契約は
 | `Export` | **deep copy**。返却 map や `json.RawMessage` を呼び出し側が改変しても Store に漏れない。Store 側の後続変更も、以前返した Export を自動では変えない |
 | `Replace` | **原子的**。成功後は渡したエントリ集合のみが観測される（空 map は全消去＝Clear 相当）。並行読取はロック待ちしてよいが、旧＋新の混在を公開しない |
 | `BeginTx` | Tx 面を開始。ネストは `ErrNestedTx` |
-| `Close` | 以降の Store 操作は `ErrClosed`（またはそれを wrap）。Memory／SQLite の二重 Close は冪等（エラーなし） |
+| `Close` | 以降の Store 操作は `ErrClosed`（またはそれを wrap）。Memory／SQLite／Redis の二重 Close は冪等（エラーなし） |
 
 ### 実装済み Backend
 
 - **Phase 1:** インメモリ（`Memory`）
 - **Phase 2:** オンディスク SQLite ファイル（`SQLite`、ドライバ `modernc.org/sqlite`・CGO なし）。スキーマは単純 KV（`key TEXT PRIMARY KEY`、value に JSON）
+- **Phase 7 / v0.8.0:** Redis プロトコル State（`Redis`、クライアント `github.com/redis/go-redis/v9`・CGO なし）。**Valkey は同一アダプタ**（`state_backend=valkey` はエイリアス）。単一 HASH（`state_redis_key_prefix` または既定 `es4:state`）の field = 論理キー、value = JSON bytes
 - Snapshot / Restore 用に Export / Replace を内部で持つ（論理 `{ "entries": { ... } }`。DB バイナリコピーはしない）
 
 ### 最適化の境界（Phase 5）
 
-- Memory／SQLite の **内部**最適化のみ許可（不要コピー削減・ロック粒度・クエリ形など）
+- Memory／SQLite／Redis の **内部**最適化のみ許可（不要コピー削減・ロック粒度・クエリ形など）
 - 共有公開 API（State／Tx／Server HTTP）の契約・シグネチャを壊さないこと
 - Backend 固有の公開 API や、共通契約を破る最適化は行わない
 
 ### Unscheduled Backend
 
-- Redis／Valkey Adapter … **Unscheduled**（実装・依存追加・Options キー追加なし）
-- その他のインメモリ／組み込み DB … **Unscheduled**（意図は実質 Redis／Valkey。発火条件の別枠なし）
+- Firestore Adapter … **Unscheduled**（v0.8.0 の次 PR 予定。本ツリーでは Options キー・依存なし）
+- その他のインメモリ／組み込み DB … **Unscheduled**
 - 将来追加する場合も、本節の `Store` 境界と Export／Replace 契約を満たす Adapter として載せる（公開面の分岐を増やさない）
 
 ## Backend 選択（`Open`）
 
-`Options.Effective()` を消費する。
+`Options.Effective()` を消費する。優先順位:
 
-| Effective 条件 | Backend |
-|----------------|---------|
-| `memory_only=true` | Memory（`state_path` 無視） |
-| `state_path` 非空 | SQLite（欠落ファイルは新規空で成功。開けない path は Open エラー） |
-| `state_path` 空 | Memory（互換） |
-| `OpenWith` で State 注入 | 注入優先 |
+| 優先 | Effective 条件 | Backend |
+|------|----------------|---------|
+| 1 | `OpenWith` で State 注入 | 注入優先 |
+| 2 | `memory_only=true` | Memory（`state_path` / `state_backend` / redis 系無視） |
+| 3 | `state_backend=redis` または `valkey` | Redis アダプタ（`state_redis_url` 必須） |
+| 4 | `state_backend=memory` | Memory（`state_path` 無視可） |
+| 5 | `state_path` 非空（または `state_backend=sqlite`） | SQLite（欠落ファイルは新規空で成功。開けない path は Open エラー） |
+| 6 | それ以外（空 `state_path`） | Memory（互換） |
 
 ## ライフサイクル入口
 

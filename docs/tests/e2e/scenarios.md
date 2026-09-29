@@ -10,8 +10,10 @@
 - ファイル SQLite: `packages/go/pkg/es4/file_sqlite_e2e_test.go`
 - インメモリ: `packages/go/pkg/es4/memory_e2e_test.go`
 - libSQL: `packages/go/pkg/es4/libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go`
-- `cd packages/go && go test -tags=e2e ./... -count=1`（S3 は RustFS 起動下。未起動時は Object のみ skip。libSQL は RustFS 不要）
-- CI: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql）
+- Redis State: `packages/go/pkg/es4/redis_state_e2e_test.go`
+- Valkey State: `packages/go/pkg/es4/valkey_state_e2e_test.go`
+- `cd packages/go && go test -tags=e2e ./... -count=1`（S3 は RustFS 起動下。未起動時は Object のみ skip。libSQL は RustFS 不要。redis／valkey は URL 未設定なら skip）
+- CI: `.github/workflows/e2e.yml`（`workflow_dispatch` のみ・`layer` 入力: all|object|file|memory|libsql|redis|valkey）
 
 採用マトリクス: [`e2e-spec.md`](./e2e-spec.md) §0.2。
 
@@ -414,15 +416,93 @@
 
 ----
 
+# E. Redis State 層（§R · C1–C5）
+
+### 前提
+
+- `state_backend=redis`、`ES4_E2E_REDIS_URL`、一意 `state_redis_key_prefix`
+- Close→再 Open で **State Backend 自身の永続**を証明（Recovery／SnapshotNow 不要）
+- URL 未設定時 skip。CI `layer=redis` は require
+
+----
+
+### E.1 保存 → 再起動 → 読める — C1
+
+対応: §R.1 · `TestE2E_RedisState_SaveRestartRestore`
+
+#### 手順
+
+1. Open → Set → Close → 再 Open → Get／Exists
+
+#### 期待
+
+- 再 Open 後に投入 JSON と同一、Exists true
+
+----
+
+### E.2 複数キー／階層 — C2
+
+対応: §R.2 · `TestE2E_RedisState_MultiKeyHierarchy`
+
+#### 期待
+
+- 複数キー＋ Tx Commit 済みキーが再 Open ですべて戻る
+
+----
+
+### E.3 未コミットは戻らない — C3
+
+対応: §R.3 · `TestE2E_RedisState_UncommittedNotRestored`
+
+#### 手順
+
+1. BeginTx → Set → Rollback → Close → 再 Open → Get
+
+#### 期待
+
+- `ErrNotFound`
+
+----
+
+### E.4 空からの起動 — C4
+
+対応: §R.4 · `TestE2E_RedisState_EmptyStartup`
+
+#### 期待
+
+- 起動直後は空。基本 Set／Get 可
+
+----
+
+### E.5 クリーンアップ冪等 — C5
+
+対応: §R.5 · `TestE2E_RedisState_CleanupIdempotent`
+
+#### 期待
+
+- prefix `DEL` を 2 回してもエラーなし
+
+----
+
+# F. Valkey State 層（§V · C1–C5）
+
+### 前提
+
+- §E と同型。`ES4_E2E_VALKEY_URL`、`state_backend=valkey`、Compose `valkey`（6380）
+- テスト: `TestE2E_ValkeyState_*`（C1–C5）
+
+----
+
 ## 非対象
 
 `e2e-spec.md` §6 および §5.6／C6 のとおり:
 
 - TTL／世代剪定の E2E（任意）
 - リモート Turso／`libsql://` クラウド、Es4 Server HTTP E2E
-- 本番 AWS S3／GCS、Redis／Valkey
+- 本番 AWS S3／GCS／ElastiCache／Memorystore、Firestore（次 PR）
 - push／pull_request 自動 CI（E2E は手動 `workflow_dispatch` のみ）
 - インメモリ／libSQL Memory の C1／C3（再起動復元はユースケース外）
+- `layer=all` への redis／valkey 混入
 
 ----
 
@@ -434,6 +514,7 @@
 - ファイル SQLite: §B.1–§B.5（C1–C5）が PASS（RustFS 不要）
 - インメモリ: §C.2・§C.4・§C.5 が PASS（RustFS 不要）
 - libSQL: §D.F.1–§D.F.5 および §D.M.2・§D.M.4・§D.M.5 が PASS（RustFS 不要）
+- Redis／Valkey State: §E.1–§E.5／§F（C1–C5）が各 Compose 下で PASS
 - 期待は各層の e2e-spec 節と一致（新規 FAIL 基準を設けない）
 
 ----

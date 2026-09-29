@@ -24,6 +24,9 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 | `recovery_s3_region` | string | `""` | `ES4_RECOVERY_S3_REGION` |
 | `recovery_s3_endpoint` | string | `""` | `ES4_RECOVERY_S3_ENDPOINT` |
 | `state_path` | string（オンディスク SQLite パス） | `""` | `ES4_STATE_PATH` |
+| `state_backend` | string（`""` \| `memory` \| `sqlite` \| `redis` \| `valkey`） | `""` | `ES4_STATE_BACKEND` |
+| `state_redis_url` | string（`state_backend=redis|valkey` 時必須） | `""` | `ES4_STATE_REDIS_URL` |
+| `state_redis_key_prefix` | string（任意。Redis HASH 名・E2E 隔離） | `""` | `ES4_STATE_REDIS_KEY_PREFIX` |
 
 ## 振る舞い
 
@@ -47,10 +50,10 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 - duration / bool の受理規則は設定ファイルと同じ
 - 空文字は未設定扱い（スキップ）。下位の値を消さない（`recovery_libsql_auth_token` も同様）
 
-### memory_only と Recovery / state_path
+### memory_only と Recovery / state_path / state_backend
 
 - 前提: `memory_only` が `true`
-- 手順: Recovery 関連設定（`recovery_*`・`snapshot_interval`・`restore_on_startup`）および `state_path` は**無視して続行**する。設定エラーにはしない（必須キー検査もスキップ）
+- 手順: Recovery 関連設定（`recovery_*`・`snapshot_interval`・`restore_on_startup`）、`state_path`、および **`state_backend`／`state_redis_*`** は**無視して続行**する。設定エラーにはしない（必須キー検査もスキップ）
 - 下流の Snapshot / Recovery / Open は `Effective()` の値を消費する（`Effective()` は上記をクリアする）
 
 ### recovery_backend
@@ -69,8 +72,18 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 
 ### state_path
 
-- オンディスク SQLite State のパス。非空かつ `memory_only` false のとき Open は SQLite Backend を選ぶ
+- オンディスク SQLite State のパス。非空かつ `memory_only` false で、`state_backend` が redis/valkey/memory でないとき Open は SQLite Backend を選ぶ
 - 空なら Memory（互換）。`memory_only` true なら無視
+
+### state_backend / state_redis_*
+
+- `state_backend`: `""`（既存互換: path／memory_only で決定）\| `memory` \| `sqlite` \| `redis` \| `valkey`
+- `valkey` は **エイリアス**（実装は redis と同じアダプタ）
+- `state_backend=redis|valkey` → `state_redis_url` 必須（欠落は Validate／Open エラー）
+- `state_backend=sqlite` かつ `state_path` 空 → Validate エラー
+- `state_backend=memory` → Memory（`state_path` 無視可）
+- `state_redis_key_prefix` は任意。空なら Redis HASH 名は `es4:state`
+- Open 選択優先（Effective 後）: 注入 → `memory_only` → `redis|valkey` → `state_path`／sqlite → Memory
 
 ## 関連
 

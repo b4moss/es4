@@ -108,6 +108,15 @@ func ApplyEnv(opts Options, getenv func(string) string) (Options, error) {
 	if v := getenv(EnvPrefix + "STATE_PATH"); v != "" {
 		overlay.statePath = &v
 	}
+	if v := getenv(EnvPrefix + "STATE_BACKEND"); v != "" {
+		overlay.stateBackend = &v
+	}
+	if v := getenv(EnvPrefix + "STATE_REDIS_URL"); v != "" {
+		overlay.stateRedisURL = &v
+	}
+	if v := getenv(EnvPrefix + "STATE_REDIS_KEY_PREFIX"); v != "" {
+		overlay.stateRedisKeyPrefix = &v
+	}
 	return merge(opts, overlay), nil
 }
 
@@ -130,6 +139,9 @@ type partial struct {
 	recoveryS3Region        *string
 	recoveryS3Endpoint      *string
 	statePath               *string
+	stateBackend            *string
+	stateRedisURL           *string
+	stateRedisKeyPrefix     *string
 }
 
 func loadFile(path string) (partial, error) {
@@ -238,6 +250,24 @@ func loadFile(path string) (partial, error) {
 				return partial{}, fmt.Errorf("options: state_path: %w", err)
 			}
 			out.statePath = &s
+		case "state_backend":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_backend: %w", err)
+			}
+			out.stateBackend = &s
+		case "state_redis_url":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_redis_url: %w", err)
+			}
+			out.stateRedisURL = &s
+		case "state_redis_key_prefix":
+			s, err := parseStringNode(valNode)
+			if err != nil {
+				return partial{}, fmt.Errorf("options: state_redis_key_prefix: %w", err)
+			}
+			out.stateRedisKeyPrefix = &s
 		}
 	}
 	return out, nil
@@ -283,6 +313,15 @@ func merge(base Options, over partial) Options {
 	}
 	if over.statePath != nil {
 		out.StatePath = *over.statePath
+	}
+	if over.stateBackend != nil {
+		out.StateBackend = *over.stateBackend
+	}
+	if over.stateRedisURL != nil {
+		out.StateRedisURL = *over.stateRedisURL
+	}
+	if over.stateRedisKeyPrefix != nil {
+		out.StateRedisKeyPrefix = *over.stateRedisKeyPrefix
 	}
 	return out
 }

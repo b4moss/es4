@@ -4,7 +4,8 @@
 // with later Server environment variables (prefix ES4_ + SCREAMING_SNAKE).
 //
 // Assemble order: Defaults → optional YAML file → ES4_* env overlay.
-// When MemoryOnly is true, recovery-related settings and state_path are ignored (not rejected);
+// When MemoryOnly is true, recovery-related settings, state_path, and
+// state_backend / redis settings are ignored (not rejected);
 // downstream Snapshot / Recovery / Open should consume Effective() values.
 package options
 
@@ -26,6 +27,14 @@ const (
 	RecoveryBackendObject = "object"
 )
 
+// State backend identifiers (state_backend).
+const (
+	StateBackendMemory = "memory"
+	StateBackendSQLite = "sqlite"
+	StateBackendRedis  = "redis"
+	StateBackendValkey = "valkey" // alias of redis (same adapter)
+)
+
 // Options holds library configuration. Options are the source of truth;
 // an optional YAML config file and env overlay only help build them.
 type Options struct {
@@ -36,7 +45,8 @@ type Options struct {
 	RestoreOnStartup bool
 
 	// MemoryOnly is memory_only (default false). When true, recovery-related
-	// settings and state_path are ignored — see Effective.
+	// settings, state_path, and state_backend / redis settings are ignored —
+	// see Effective.
 	MemoryOnly bool
 
 	// RecoveryPath is recovery_path (file Recovery location). Empty by default.
@@ -70,12 +80,25 @@ type Options struct {
 	RecoveryS3Endpoint string
 
 	// StatePath is state_path (on-disk SQLite State file). Empty by default.
-	// When non-empty and MemoryOnly is false, Open selects the SQLite backend.
+	// When non-empty and MemoryOnly is false (and state_backend is not
+	// redis/valkey/memory), Open selects the SQLite backend.
 	// Ignored when MemoryOnly is true.
 	StatePath string
+
+	// StateBackend is state_backend: "" | memory | sqlite | redis | valkey.
+	// Empty preserves path / memory_only selection (compat).
+	// valkey is an alias of redis (same adapter).
+	StateBackend string
+
+	// StateRedisURL is state_redis_url (required when state_backend=redis|valkey).
+	StateRedisURL string
+
+	// StateRedisKeyPrefix is state_redis_key_prefix (optional HASH key / namespace).
+	// Empty uses the default Redis HASH name es4:state.
+	StateRedisKeyPrefix string
 }
 
-// Defaults returns Phase 1–3 default Options.
+// Defaults returns Phase 1–3 default Options (plus empty state_backend keys).
 func Defaults() Options {
 	return Options{
 		SnapshotInterval: DefaultSnapshotInterval,
@@ -85,12 +108,15 @@ func Defaults() Options {
 		RecoveryBackend:  "",
 		RecoveryTTL:      0,
 		StatePath:        "",
+		StateBackend:     "",
 	}
 }
 
-// Effective returns Options with recovery-related fields and state_path cleared
-// when MemoryOnly is true. Cleared fields: SnapshotInterval, RestoreOnStartup,
-// RecoveryPath, RecoveryBackend, RecoveryTTL, libSQL/S3 recovery keys, StatePath.
+// Effective returns Options with recovery-related fields, state_path, and
+// state_backend / redis fields cleared when MemoryOnly is true.
+// Cleared fields: SnapshotInterval, RestoreOnStartup, RecoveryPath,
+// RecoveryBackend, RecoveryTTL, libSQL/S3 recovery keys, StatePath,
+// StateBackend, StateRedisURL, StateRedisKeyPrefix.
 // Does not error if those fields were set while MemoryOnly is true.
 func (o Options) Effective() Options {
 	if !o.MemoryOnly {
@@ -110,6 +136,9 @@ func (o Options) Effective() Options {
 		RecoveryS3Region:        "",
 		RecoveryS3Endpoint:      "",
 		StatePath:               "",
+		StateBackend:            "",
+		StateRedisURL:           "",
+		StateRedisKeyPrefix:     "",
 	}
 }
 
@@ -131,10 +160,22 @@ func (o Options) ResolvedRecoveryBackend() string {
 	return ""
 }
 
-// Validate checks recovery_backend / recovery_ttl and backend-required keys.
-// Callers that consume Effective Options (e.g. Open) should Validate the
-// Effective view. When MemoryOnly is true, recovery required-key checks are
-// skipped (those settings are ignored, not rejected).
+// IsRedisStateBackend reports whether state_backend selects the Redis protocol
+// adapter (redis or valkey alias).
+func (o Options) IsRedisStateBackend() bool {
+	switch o.StateBackend {
+	case StateBackendRedis, StateBackendValkey:
+		return true
+	default:
+		return false
+	}
+}
+
+// Validate checks recovery_backend / recovery_ttl / state_backend and
+// backend-required keys. Callers that consume Effective Options (e.g. Open)
+// should Validate the Effective view. When MemoryOnly is true, recovery and
+// redis required-key checks are skipped (those settings are ignored, not
+// rejected).
 func (o Options) Validate() error {
 	if o.RecoveryTTL < 0 {
 		return fmt.Errorf("options: recovery_ttl: must be >= 0")
@@ -144,6 +185,12 @@ func (o Options) Validate() error {
 		// ok
 	default:
 		return fmt.Errorf("options: recovery_backend: want file|libsql|object, got %q", o.RecoveryBackend)
+	}
+	switch o.StateBackend {
+	case "", StateBackendMemory, StateBackendSQLite, StateBackendRedis, StateBackendValkey:
+		// ok
+	default:
+		return fmt.Errorf("options: state_backend: want memory|sqlite|redis|valkey, got %q", o.StateBackend)
 	}
 	if o.MemoryOnly {
 		return nil
@@ -161,6 +208,12 @@ func (o Options) Validate() error {
 		if o.RecoveryS3Bucket == "" {
 			return fmt.Errorf("options: recovery_s3_bucket: required when recovery_backend=object")
 		}
+	}
+	if o.IsRedisStateBackend() && o.StateRedisURL == "" {
+		return fmt.Errorf("options: state_redis_url: required when state_backend=%s", o.StateBackend)
+	}
+	if o.StateBackend == StateBackendSQLite && o.StatePath == "" {
+		return fmt.Errorf("options: state_path: required when state_backend=sqlite")
 	}
 	return nil
 }

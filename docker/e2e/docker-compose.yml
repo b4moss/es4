@@ -1,8 +1,13 @@
-# Es4 E2E — RustFS as S3-compatible Object Recovery backend.
+# Es4 E2E — RustFS (S3 Object Recovery) + Redis / Valkey (State Backend).
 # From repository root:
 #   docker compose -f docker/e2e/docker-compose.yml up -d
-#   curl -sf http://127.0.0.1:9000/health
-# S3 API: http://127.0.0.1:9000  (path-style)
+#   # or a single service:
+#   docker compose -f docker/e2e/docker-compose.yml up -d redis
+#   docker compose -f docker/e2e/docker-compose.yml up -d valkey
+#
+# RustFS S3 API: http://127.0.0.1:9000  (path-style)
+# Redis:  redis://127.0.0.1:6379/0
+# Valkey: redis://127.0.0.1:6380/0
 # Credentials below are E2E-only (not for production).
 
 services:
@@ -31,6 +36,30 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: es4-e2e-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: es4-e2e-valkey
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
 
 volumes:
   es4_e2e_rustfs_data:

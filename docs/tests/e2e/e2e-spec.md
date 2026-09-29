@@ -1,7 +1,7 @@
 # E2E テスト仕様
 
 正本のドメイン仕様: [`docs/specs/recovery/`](../../specs/recovery/) · [`docs/specs/snapshot/`](../../specs/snapshot/) · [`docs/specs/options/`](../../specs/options/) · [`docs/specs/state/`](../../specs/state/)。  
-本ファイルは es4 の **E2E（エンドツーエンド）** の思想・層の役割分担・**共通シナリオ定義**、および現時点で実装済みの各層（S3 互換・File SQLite・インメモリ・libSQL）の手順と成功条件を定める。
+本ファイルは es4 の **E2E（エンドツーエンド）** の思想・層の役割分担・**共通シナリオ定義**、および現時点で実装済みの各層（S3 互換・File SQLite・インメモリ・libSQL・Redis／Valkey State）の手順と成功条件を定める。
 
 シナリオ別の正常系／異常系整理: [`scenarios.md`](./scenarios.md)（各層の検証基準に整合。S3 互換 §5.1–§5.5 の判定は変更しない）。
 
@@ -25,6 +25,8 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 | **ファイル SQLite** | **ローカル永続**のユーザー | 共通カタログから、ローカルファイル永続＋再起動／プロセス再起動を含むものを採用 | **含める** |
 | **インメモリ** | **永続化を期待しない**ユーザー | 起動から基本操作までのフローに絞る | **含めない**（ユースケースから外れる） |
 | **libSQL Recovery** | ローカル libSQL／SQLite 互換 Recovery のユーザー | §L: File-backed は C1–C5、InMemory は C2／C4／C5 | File-backed のみ **含める**（リモート Turso は非対象） |
+| **Redis State** | リモート State（Redis プロトコル）のユーザー | §R: C1–C5。State 自身の Close→再 Open 永続（Recovery 不要） | **含める**（State 再 Open） |
+| **Valkey State** | 同上（Valkey プロセス） | §V: C1–C5。同一アダプタの別プロセス証明 | **含める**（State 再 Open） |
 
 ### インメモリを E2E 対象から外さない理由
 
@@ -36,16 +38,16 @@ E2E で最も大事なのは、**ユーザーのユースケースに絞るこ�
 
 以下は **共通カタログ**である。各層は ○＝採用、—＝採用しない。S3 互換の ○ は現行 §5.1–§5.5（および任意の §5.6）に対応し、**内容・判定基準は変えない**。
 
-| ID | 共通シナリオ（要約） | S3 互換 | ファイル SQLite | インメモリ | libSQL File | libSQL Memory |
-|----|----------------------|---------|-----------------|------------|-------------|---------------|
-| C1 | 保存 → 再起動 → リカバリ（Save 済みのみ戻る） | ○（§5.1） | ○（§F.1） | — | ○（§L.F.1） | — |
-| C2 | 複数キー／階層 | ○（§5.2） | ○（§F.2） | ○（§M.2。再起動なし。起動後の複数キー基本操作） | ○（§L.F.2） | ○（§L.M.2。再起動なし。SnapshotNow をプロセス内で行使） |
-| C3 | 未保存は戻らない | ○（§5.3） | ○（§F.3） | — | ○（§L.F.3） | — |
-| C4 | 空状態からの起動（欠落は空続行） | ○（§5.4） | ○（§F.4） | ○（§M.4。再起動・Recovery なし。起動直後の空 State／基本操作） | ○（§L.F.4） | ○（§L.M.4） |
-| C5 | 隔離リソースのクリーンアップ・冪等 | ○（§5.5） | ○（§F.5。作業ディレクトリ等） | ○（§M.5。プロセス内 Clear／Close の冪等） | ○（§L.F.5） | ○（§L.M.5） |
-| C6 | TTL／世代（任意） | 任意（§5.6） | 任意 | — | 任意 | — |
+| ID | 共通シナリオ（要約） | S3 互換 | ファイル SQLite | インメモリ | libSQL File | libSQL Memory | Redis State | Valkey State |
+|----|----------------------|---------|-----------------|------------|-------------|---------------|-------------|--------------|
+| C1 | 保存 → 再起動 → リカバリ（Save 済みのみ戻る） | ○（§5.1） | ○（§F.1） | — | ○（§L.F.1） | — | ○（§R.1。State 永続） | ○（§V.1） |
+| C2 | 複数キー／階層 | ○（§5.2） | ○（§F.2） | ○（§M.2。再起動なし。起動後の複数キー基本操作） | ○（§L.F.2） | ○（§L.M.2。再起動なし。SnapshotNow をプロセス内で行使） | ○（§R.2） | ○（§V.2） |
+| C3 | 未保存は戻らない | ○（§5.3） | ○（§F.3） | — | ○（§L.F.3） | — | ○（§R.3。Rollback） | ○（§V.3） |
+| C4 | 空状態からの起動（欠落は空続行） | ○（§5.4） | ○（§F.4） | ○（§M.4。再起動・Recovery なし。起動直後の空 State／基本操作） | ○（§L.F.4） | ○（§L.M.4） | ○（§R.4） | ○（§V.4） |
+| C5 | 隔離リソースのクリーンアップ・冪等 | ○（§5.5） | ○（§F.5。作業ディレクトリ等） | ○（§M.5。プロセス内 Clear／Close の冪等） | ○（§L.F.5） | ○（§L.M.5） | ○（§R.5） | ○（§V.5） |
+| C6 | TTL／世代（任意） | 任意（§5.6） | 任意 | — | 任意 | — | — | — |
 
-ファイル SQLite／インメモリ／libSQL 層の手順・実装パスは §F・§M・§L。共通 ID（C1–C6）との対応を保ち、**S3 互換 §5 の文面・判定基準は改変しない**。
+ファイル SQLite／インメモリ／libSQL／Redis／Valkey 層の手順・実装パスは §F・§M・§L・§R・§V。共通 ID（C1–C6）との対応を保ち、**S3 互換 §5 の文面・判定基準は改変しない**。
 
 ----
 
@@ -69,6 +71,14 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_ObjectRecovery_' -co
 
 # libSQL のみ（file-backed + in-memory。RustFS 不要）
 cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1
+
+# Redis State（Compose redis 起動後）
+export ES4_E2E_REDIS_URL=redis://127.0.0.1:6379/0
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1
+
+# Valkey State（Compose valkey 起動後）
+export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1
 ```
 
 エンドポイント／認証（Compose 既定）:
@@ -425,15 +435,91 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1
 
 ----
 
+## R. Redis State 層（v0.8.0）
+
+リモート State Backend ユーザー向け。共通カタログ **C1–C5**。証明対象は **State 自身の永続**（Close→再 Open、同 URL／prefix）。Recovery／SnapshotNow は必須としない。`snapshot_interval=0`。
+
+実装配置:
+- ハーネス: `packages/go/pkg/es4/redis_state_e2e_test.go`（`//go:build e2e`）
+- Compose: [`docker/e2e/docker-compose.yml`](../../../docker/e2e/docker-compose.yml) の `redis` サービス
+- CI: [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `layer=redis`（**`layer=all` には含めない**）
+
+必須検証コマンド:
+```text
+docker compose -f docker/e2e/docker-compose.yml up -d --wait redis
+export ES4_E2E_REDIS_URL=redis://127.0.0.1:6379/0
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1
+```
+
+URL 未設定時は skip。CI の `layer=redis` は `ES4_E2E_REQUIRE_REDIS=1` で欠落時 fail。
+
+### R.0 Options と隔離
+
+| キー | E2E 推奨値 |
+|------|------------|
+| `state_backend` | `redis` |
+| `state_redis_url` | `ES4_E2E_REDIS_URL` |
+| `state_redis_key_prefix` | `e2e/<run>/<case>/`（一意） |
+| `snapshot_interval` | `0` |
+| `restore_on_startup` | `false`（Recovery 未使用） |
+| `memory_only` | `false` |
+
+- テストごと一意 prefix。開始時／`t.Cleanup` で HASH（prefix）を `DEL`（冪等）
+- 再起動 = Close → 再 Open（同じ URL／prefix）
+
+### R.1 C1 — 保存 → 再起動 → 読める
+
+1. Open → Set（Tx なら Commit）→ Close → 再 Open → Get／Exists 一致
+
+### R.2 C2 — 複数キー／階層
+
+- 複数キー＋任意 Tx Commit 後、再 Open ですべて戻る
+
+### R.3 C3 — 未コミットは戻らない
+
+- BeginTx → Set → **Rollback** → 再 Open でキー欠落
+
+### R.4 C4 — 空からの起動
+
+- 専用 prefix を清空して Open → State 空・基本操作可
+
+### R.5 C5 — クリーンアップ冪等
+
+- case 終了時に prefix 配下削除を 2 回 → エラーなし
+
+----
+
+## V. Valkey State 層（v0.8.0）
+
+§R と同じカタログ・同じ Redis プロトコルアダプタ。プロセスだけ Valkey。`state_backend=valkey` エイリアスを E2E で行使してよい。
+
+実装配置:
+- ハーネス: `packages/go/pkg/es4/valkey_state_e2e_test.go`（`//go:build e2e`）
+- Compose: `valkey` サービス（ホスト `6380`）
+- CI: `layer=valkey`（**`layer=all` には含めない**）
+
+必須検証コマンド:
+```text
+docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
+export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
+cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1
+```
+
+URL 未設定時は skip。CI は `ES4_E2E_REQUIRE_VALKEY=1`。手順・期待は §R.1–§R.5 と同型（§V.1–§V.5）。
+
+----
+
 ## 6. 非対象
 
-- Redis／Valkey State Backend
+- Firestore State Backend（v0.8.0 次 PR）
+- Redis／Valkey を Recovery に使うこと
 - リモート Turso／ホスト型 `libsql://` クラウド（本 E2E はローカル file／`:memory:` のみ）
-- Es4 Server HTTP の E2E（本ファイルはライブラリ Open／Recovery 経路。Server 経由は将来拡張）
-- 本番クラウド（AWS S3／GCS）への到達（RustFS ローカルで代替）
+- Es4 Server HTTP の E2E（本ファイルはライブラリ Open／Recovery／State 経路。Server 経由は将来拡張）
+- 本番クラウド（AWS S3／GCS／ElastiCache／Memorystore）への到達（ローカル Compose で代替）
 - 負荷・性能 SLO
 - 認証・認可プロダクト機能
 - push／pull_request 自動 CI（E2E は手動 `workflow_dispatch` のみ）
+- `layer=all` への redis／valkey 混入
 
 ----
 
@@ -461,10 +547,16 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1
 - §L.F.1–§L.F.5（File-backed C1–C5）および §L.M.2・§L.M.4・§L.M.5（InMemory C2／C4／C5）が PASS（RustFS 不要）
 - `layer=all` でも libSQL は外部サービスに依存しない
 
+### Redis／Valkey State 層
+
+- §R.1–§R.5 および §V.1–§V.5（C1–C5）が各 Compose 下で PASS
+- URL 未設定時は skip。当該 CI layer では require env で fail-on-missing
+- `layer=all`／object／file／memory／libsql では redis／valkey サービスを起動しない
+
 ### 横断
 
-- RustFS 起動下で `cd packages/go && go test -tags=e2e ./... -count=1` が全対象層とも PASS
-- CI は [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `workflow_dispatch`（`layer` 入力: all|object|file|memory|libsql）のみ
+- RustFS 起動下で `cd packages/go && go test -tags=e2e ./... -count=1` が既存対象層とも PASS（redis／valkey は URL 未設定なら skip）
+- CI は [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) の `workflow_dispatch`（`layer` 入力: all|object|file|memory|libsql|redis|valkey）のみ
 
 ----
 
@@ -472,10 +564,10 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1
 
 - シナリオ別テスト仕様: [`docs/tests/e2e/scenarios.md`](./scenarios.md)
 - Recovery: [`docs/specs/recovery/recovery.md`](../../specs/recovery/recovery.md)
-- Options（`recovery_s3_*`／`recovery_libsql_*`／`state_path`／`memory_only`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
+- Options（`recovery_s3_*`／`recovery_libsql_*`／`state_path`／`state_backend`／`state_redis_*`／`memory_only`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
 - Snapshot: [`docs/specs/snapshot/`](../../specs/snapshot/)
 - 単体に近い Object テスト: `packages/go/internal/recovery/object_test.go`（本 E2E とは別。フェイク）
-- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md) · [`docs/plans/v0.7.1/e2e-three-layer.md`](../../plans/v0.7.1/e2e-three-layer.md) · [`docs/plans/v0.7.3/e2e-libsql.md`](../../plans/v0.7.3/e2e-libsql.md)
+- Plan: [`docs/plans/v0.7.0/e2e-object-recovery.md`](../../plans/v0.7.0/e2e-object-recovery.md) · [`docs/plans/v0.7.1/e2e-three-layer.md`](../../plans/v0.7.1/e2e-three-layer.md) · [`docs/plans/v0.7.3/e2e-libsql.md`](../../plans/v0.7.3/e2e-libsql.md) · [`docs/plans/v0.8.0/redis-valkey-state.md`](../../plans/v0.8.0/redis-valkey-state.md)
 
 ----
 
