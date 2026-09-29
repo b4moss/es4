@@ -1,0 +1,63 @@
+name: CodeQL
+
+# Default setup は使わず、advanced setup でトリガを制御する。
+# 方針: main への pull_request のときだけ解析する（develop / dev-v* / release では走らない）。
+#
+# --- Private 現状 ---
+# - GitHub Advanced Security 未導入のため SARIF upload 不可 → upload: never
+#
+# --- Public 化（または GHAS 有効化）したら ---
+# 1. analyze ステップの `upload: never` を削除（デフォルト upload に戻す）
+# 2. 必要なら下の push trigger もアンコメント
+
+on:
+  pull_request:
+    branches:
+      - main
+  # Public / GHAS 後に main への push でも回したい場合:
+  # push:
+  #   branches:
+  #     - main
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: go
+            build-mode: autobuild
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3.38.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
+        uses: github/codeql-action/autobuild@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3.38.1
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3.38.1
+        with:
+          category: "/language:${{ matrix.language }}"
+          # Private + no GHAS: keep. Public / GHAS 有効化後はこの行を削除する。
+          upload: never

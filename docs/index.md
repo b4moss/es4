@@ -15,13 +15,14 @@ okf_version: "0.1"
 
 # Project Docs
 
-* [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 0–6 / 暫定 SemVer `v0.1.0`–`v0.7.1`）
+* [roadmap.md](roadmap.md) - マイルストーン一覧（Phase 0–6 / 暫定 SemVer `v0.1.0`–`v0.7.2`）
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
 * [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（実装完了・決定事項／完了注記・Git タグ済み）
 * [plans/v0.7.0/e2e-object-recovery.md](plans/v0.7.0/e2e-object-recovery.md) - Phase 6 E2E Object Recovery × RustFS（実装完了・完了注記）
 * [plans/v0.7.1/e2e-three-layer.md](plans/v0.7.1/e2e-three-layer.md) - Phase 6 追補 E2E 三層（File／Memory・完了注記）
+* [plans/v0.7.2/github-actions.md](plans/v0.7.2/github-actions.md) - Phase 6 追補 GitHub Actions スイート（実装完了・完了注記）
 * [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
 * [specs](specs/) - 現行機能の仕様正本
 * [specs/options](specs/options/) - Options（設定）
