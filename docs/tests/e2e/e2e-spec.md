@@ -190,6 +190,8 @@ E2E では **方式 A** に固定する。
 
 ## 8. 関連
 
+- シナリオ別テスト仕様（正常系／異常系）: [`docs/tests/e2e/scenarios.md`](./scenarios.md)
+
 - Recovery: [`docs/specs/recovery/recovery.md`](../../specs/recovery/recovery.md)
 - Options（`recovery_s3_*`）: [`docs/specs/options/options.md`](../../specs/options/options.md)
 - Snapshot: [`docs/specs/snapshot/`](../../specs/snapshot/)
