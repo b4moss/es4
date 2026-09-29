@@ -3,7 +3,7 @@
 これからやる内容の索引。版フォルダは [`roadmap.md`](../roadmap.md) の暫定 SemVer に合わせる。  
 実装完了後は該当ファイルを `docs/specs/` へ**移動**し、本索引を更新する。
 
-未決のプロダクト論点（他の決定を拘束するものから優先）は [open-questions.md](./open-questions.md)。wishlist ではなく本索引配下のバックログとする。
+未決のプロダクト論点（他の決定を拘束するものから優先）は [open-questions.md](./open-questions.md)。Phase 1 で決まった事実は [v0.2.0/minimal-core.md](./v0.2.0/minimal-core.md#決定事項)。wishlist ではなく本索引配下のバックログとする。
 
 | 暫定マイルストーン | Phase | 状態 | ファイル |
 |--------------------|-------|------|----------|

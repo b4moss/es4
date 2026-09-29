@@ -12,7 +12,7 @@
 ## ざっくり範囲
 
 - 必要なディレクトリツリーを **`.gitkeep` のみ**で追加する
-- 正確なパッケージ分割は [open-questions P8](../open-questions.md) 未決のため、以下は **暫定プレースホルダ**とする（公開 API を固定しない）
+- 正確なパッケージ分割は [open-questions P8](../open-questions.md) 未決のため、以下は **暫定プレースホルダ**とする（公開面は State API のみ、[Phase 1 決定事項](../v0.2.0/minimal-core.md#決定事項)）
 - 多言語ポートと Docker を見据え、言語別コードは `packages/<lang>/` 配下、コンテナ関連は `docker/` に置く
 
 暫定ツリー（空ディレクトリ + `.gitkeep`）:

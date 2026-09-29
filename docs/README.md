@@ -70,7 +70,7 @@ sequenceDiagram
     participant State as State Store
     participant Recovery as Recovery Storage
 
-    App->>Es4: SET / GET / DELETE
+    App->>Es4: SET / GET / DELETE / EXISTS / CLEAR
     Es4->>State: Update / Read
     State-->>Es4: Current State
     Es4-->>App: Result
@@ -136,6 +136,7 @@ flowchart LR
 
 - [roadmap](./roadmap.md) — マイルストーン（Phase 0–5 / 暫定 SemVer `v0.1.0`–`v0.6.0`）
 - [plans](./plans/) — これからやる内容
+- [Phase 1 決定事項](./plans/v0.2.0/minimal-core.md#決定事項) — State API・公開面・Recovery など（PO Q&A）
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（優先度順）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
 - [specs](./specs/) — 現行仕様（現状なし）
