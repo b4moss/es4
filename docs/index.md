@@ -19,7 +19,6 @@ okf_version: "0.1"
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容
 * [plans/v0.1.0/scaffold.md](plans/v0.1.0/scaffold.md) - Phase 0 スキャフォールド（完了・決定事項含む）
-* [plans/v0.5.0/es4-server.md](plans/v0.5.0/es4-server.md) - Phase 4 Es4 Server（決定事項含む）
 * [plans/v0.6.0/state-backend-extension.md](plans/v0.6.0/state-backend-extension.md) - Phase 5 State Backend 拡張（決定事項含む）
 * [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
 * [specs](specs/) - 現行機能の仕様正本
@@ -28,5 +27,6 @@ okf_version: "0.1"
 * [specs/tx](specs/tx/) - Tx API
 * [specs/snapshot](specs/snapshot/) - Snapshot（内部）
 * [specs/recovery](specs/recovery/) - Recovery（File / libSQL / Object・世代 TTL）
+* [specs/es4-server](specs/es4-server/) - Es4 Server（HTTP・Docker・Health）
 * [tests](tests/) - テスト仕様
-* [tests/options](tests/options/) · [tests/state](tests/state/) · [tests/tx](tests/tx/) · [tests/snapshot](tests/snapshot/) · [tests/recovery](tests/recovery/)
+* [tests/options](tests/options/) · [tests/state](tests/state/) · [tests/tx](tests/tx/) · [tests/snapshot](tests/snapshot/) · [tests/recovery](tests/recovery/) · [tests/es4-server](tests/es4-server/)

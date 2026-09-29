@@ -79,7 +79,7 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 - Snapshot: [`docs/specs/snapshot/`](../snapshot/)
 - Recovery: [`docs/specs/recovery/`](../recovery/)
 - Tx: [`docs/specs/tx/`](../tx/)
-- Server env: [`docs/plans/v0.5.0/es4-server.md`](../../plans/v0.5.0/es4-server.md#決定事項)
+- Server env: [`docs/specs/es4-server/`](../es4-server/)
 
 ----
 

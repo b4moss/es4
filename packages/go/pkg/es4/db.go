@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/b4moss/es4/packages/go/internal/recovery"
 	"github.com/b4moss/es4/packages/go/internal/snapshot"
@@ -43,6 +44,7 @@ type DB struct {
 	mu       sync.Mutex
 	closed   bool
 	restoreN sync.WaitGroup // tracks in-flight startup restore
+	ready    atomic.Bool    // true after startup restore finishes (or when skipped)
 }
 
 // OpenConfig allows tests and advanced wiring to inject adapters.
@@ -145,13 +147,17 @@ func open(ctx context.Context, cfg OpenConfig) (*DB, error) {
 	if doRestore {
 		if cfg.SkipAsyncRestore {
 			_ = db.restoreOnce(ctx)
+			db.ready.Store(true)
 		} else {
 			db.restoreN.Add(1)
 			go func() {
 				defer db.restoreN.Done()
 				_ = db.restoreOnce(context.Background())
+				db.ready.Store(true)
 			}()
 		}
+	} else {
+		db.ready.Store(true)
 	}
 
 	mgr.Start()
@@ -236,6 +242,13 @@ func (db *DB) BeginTx(ctx context.Context) (Tx, error) {
 		return nil, err
 	}
 	return db.state.BeginTx(ctx)
+}
+
+// Ready reports whether startup Restore has finished (or was skipped).
+// The library State / Tx API still accepts calls before Ready; Server
+// readiness (/readyz) and HTTP State/Tx gates use this flag.
+func (db *DB) Ready() bool {
+	return db.ready.Load()
 }
 
 // Close stops periodic snapshots, rolls back any open Tx, and releases resources.

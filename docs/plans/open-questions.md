@@ -17,7 +17,7 @@
 | Phase 1 — 最小構成 | `v0.2.0` | [state](../specs/state/) · [snapshot](../specs/snapshot/) · [recovery](../specs/recovery/) · [options](../specs/options/) |
 | Phase 2 — SQLite State | `v0.3.0` | [state](../specs/state/) · [tx](../specs/tx/) · [options](../specs/options/) |
 | Phase 3 — 外部 Recovery | `v0.4.0` | [recovery](../specs/recovery/) · [options](../specs/options/) |
-| Phase 4 — Es4 Server | `v0.5.0` | [es4-server.md](./v0.5.0/es4-server.md#決定事項) |
+| Phase 4 — Es4 Server | `v0.5.0` | [es4-server](../specs/es4-server/) |
 | Phase 5 — State Backend 拡張 | `v0.6.0` | [state-backend-extension.md](./v0.6.0/state-backend-extension.md#決定事項) |
 
 直近で閉じた Phase 3–5 の論点（世代 TTL、GCS＝S3 互換 Adapter、HTTP REST・パスキー、`ES4_`＋SCREAMING_SNAKE、Liveness／Readiness、Cloud Run、その他／Redis・Valkey Unscheduled、最適化境界）の詳細は上表の各決定事項を参照。
@@ -31,7 +31,7 @@
 ## 関連
 
 - [pillar](../README.md) · [roadmap](../roadmap.md) · [plans 索引](./README.md)
-- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0 specs](../specs/tx/) · [v0.4.0 specs](../specs/recovery/) · [v0.5.0](./v0.5.0/es4-server.md) · [v0.6.0](./v0.6.0/state-backend-extension.md)
+- Phase plans / specs: [v0.1.0](./v0.1.0/scaffold.md) · [v0.2.0 specs](../specs/state/) · [v0.3.0 specs](../specs/tx/) · [v0.4.0 specs](../specs/recovery/) · [v0.5.0 specs](../specs/es4-server/) · [v0.6.0](./v0.6.0/state-backend-extension.md)
 
 ----
 
