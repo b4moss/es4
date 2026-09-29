@@ -322,6 +322,9 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 		RecoveryS3Region:        "r",
 		RecoveryS3Endpoint:      "http://e",
 		StatePath:               "/should/ignore-state",
+		StateBackend:            "redis",
+		StateRedisURL:           "redis://127.0.0.1:6379/0",
+		StateRedisKeyPrefix:     "e2e/ignore/",
 	}
 	eff := raw.Effective()
 	if eff.SnapshotInterval != 0 {
@@ -342,6 +345,9 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 	if eff.StatePath != "" {
 		t.Fatalf("state_path should be ignored, got %q", eff.StatePath)
 	}
+	if eff.StateBackend != "" || eff.StateRedisURL != "" || eff.StateRedisKeyPrefix != "" {
+		t.Fatalf("state_backend/redis keys should be cleared: %#v", eff)
+	}
 	if !eff.MemoryOnly {
 		t.Fatal("memory_only must remain true")
 	}
@@ -353,6 +359,9 @@ func TestEffective_MemoryOnlyOn(t *testing.T) {
 	}
 	if raw.StatePath != "/should/ignore-state" {
 		t.Fatal("Effective must not mutate state_path on the receiver")
+	}
+	if raw.StateRedisURL != "redis://127.0.0.1:6379/0" {
+		t.Fatal("Effective must not mutate state_redis_url on the receiver")
 	}
 }
 
@@ -492,6 +501,75 @@ func TestValidate_BackendRequiredKeys(t *testing.T) {
 	mo := options.Options{MemoryOnly: true, RecoveryBackend: "libsql"}
 	if err := mo.Validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidate_StateBackend(t *testing.T) {
+	t.Parallel()
+	if err := (options.Options{StateBackend: "redis"}).Validate(); err == nil {
+		t.Fatal("want error: redis without url")
+	}
+	if err := (options.Options{StateBackend: "valkey"}).Validate(); err == nil {
+		t.Fatal("want error: valkey without url")
+	}
+	if err := (options.Options{StateBackend: "sqlite"}).Validate(); err == nil {
+		t.Fatal("want error: sqlite without state_path")
+	}
+	if err := (options.Options{StateBackend: "mongo"}).Validate(); err == nil {
+		t.Fatal("want error: unknown state_backend")
+	}
+	ok := options.Options{StateBackend: "redis", StateRedisURL: "redis://127.0.0.1:6379/0"}
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	okMem := options.Options{StateBackend: "memory", StatePath: "/ignored.db"}
+	if err := okMem.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	mo := options.Options{MemoryOnly: true, StateBackend: "redis"}
+	if err := mo.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoad_StateRedisKeys(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "redis.yaml")
+	if err := os.WriteFile(path, []byte(`
+state_backend: redis
+state_redis_url: redis://127.0.0.1:6379/1
+state_redis_key_prefix: es4/test/
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := options.FromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.StateBackend != "redis" || got.StateRedisURL != "redis://127.0.0.1:6379/1" {
+		t.Fatalf("%#v", got)
+	}
+	if got.StateRedisKeyPrefix != "es4/test/" {
+		t.Fatalf("prefix: %q", got.StateRedisKeyPrefix)
+	}
+
+	envGot, err := options.ApplyEnv(options.Defaults(), func(k string) string {
+		switch k {
+		case "ES4_STATE_BACKEND":
+			return "valkey"
+		case "ES4_STATE_REDIS_URL":
+			return "redis://127.0.0.1:6380/0"
+		case "ES4_STATE_REDIS_KEY_PREFIX":
+			return "env/"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envGot.StateBackend != "valkey" || envGot.StateRedisURL != "redis://127.0.0.1:6380/0" || envGot.StateRedisKeyPrefix != "env/" {
+		t.Fatalf("%#v", envGot)
 	}
 }
 

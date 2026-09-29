@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/b4moss/es4/packages/go/internal/recovery"
 	"github.com/b4moss/es4/packages/go/internal/state"
 	"github.com/b4moss/es4/packages/go/pkg/es4"
@@ -403,6 +404,104 @@ func TestOpen_BackendSelection(t *testing.T) {
 		t.Cleanup(func() { _ = db.Close() })
 		if db.StateForTest() != injected {
 			t.Fatal("OpenWith injection must take priority")
+		}
+	})
+
+	t.Run("redis_backend", func(t *testing.T) {
+		t.Parallel()
+		mr := miniredis.RunT(t)
+		db, err := es4.Open(ctx, options.Options{
+			StateBackend:        options.StateBackendRedis,
+			StateRedisURL:       "redis://" + mr.Addr(),
+			StateRedisKeyPrefix: "open/redis/",
+			SnapshotInterval:    0,
+			RestoreOnStartup:    false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Redis); !ok {
+			t.Fatalf("want Redis, got %T", db.StateForTest())
+		}
+		if err := db.Set(ctx, "k", json.RawMessage(`1`)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := db.Get(ctx, "k")
+		if err != nil || string(got) != `1` {
+			t.Fatalf("got %s err=%v", got, err)
+		}
+	})
+
+	t.Run("valkey_alias", func(t *testing.T) {
+		t.Parallel()
+		mr := miniredis.RunT(t)
+		db, err := es4.Open(ctx, options.Options{
+			StateBackend:     options.StateBackendValkey,
+			StateRedisURL:    "redis://" + mr.Addr(),
+			SnapshotInterval: 0,
+			RestoreOnStartup: false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Redis); !ok {
+			t.Fatalf("want Redis adapter for valkey alias, got %T", db.StateForTest())
+		}
+	})
+
+	t.Run("memory_only_ignores_redis", func(t *testing.T) {
+		t.Parallel()
+		mr := miniredis.RunT(t)
+		db, err := es4.Open(ctx, options.Options{
+			MemoryOnly:          true,
+			StateBackend:        options.StateBackendRedis,
+			StateRedisURL:       "redis://" + mr.Addr(),
+			StateRedisKeyPrefix: "must/not/write/",
+			SnapshotInterval:    time.Second,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Memory); !ok {
+			t.Fatalf("want Memory, got %T", db.StateForTest())
+		}
+		if err := db.Set(ctx, "k", json.RawMessage(`1`)); err != nil {
+			t.Fatal(err)
+		}
+		if mr.Exists("must/not/write/") {
+			t.Fatal("memory_only must not write to redis")
+		}
+	})
+
+	t.Run("state_backend_memory", func(t *testing.T) {
+		t.Parallel()
+		db, err := es4.Open(ctx, options.Options{
+			StateBackend:     options.StateBackendMemory,
+			StatePath:        filepath.Join(t.TempDir(), "ignored.db"),
+			SnapshotInterval: 0,
+			RestoreOnStartup: false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.StateForTest().(*state.Memory); !ok {
+			t.Fatalf("want Memory, got %T", db.StateForTest())
+		}
+	})
+
+	t.Run("redis_url_required", func(t *testing.T) {
+		t.Parallel()
+		_, err := es4.Open(ctx, options.Options{
+			StateBackend:     options.StateBackendRedis,
+			SnapshotInterval: 0,
+			RestoreOnStartup: false,
+		})
+		if err == nil {
+			t.Fatal("want validate error for missing state_redis_url")
 		}
 	})
 }

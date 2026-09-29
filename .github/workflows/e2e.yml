@@ -1,14 +1,18 @@
-# E2E (five layers) — Object / File SQLite / Memory / libSQL
+# E2E layers — Object / File SQLite / Memory / libSQL / Redis / Valkey
 #
 # Manual only — do NOT add push / pull_request / schedule triggers.
 # Start from the GitHub Actions UI (workflow_dispatch).
 #
 # Input `layer`:
-#   - all     : RustFS + full `go test -tags=e2e ./...`
+#   - all     : RustFS + full `go test -tags=e2e ./...` (Redis/Valkey skip unless URLs set)
 #   - object  : RustFS + Object Recovery tests only (strict RustFS required)
 #   - file    : File SQLite layer only (no RustFS)
 #   - memory  : In-memory layer only (no RustFS)
 #   - libsql  : libSQL Recovery (file-backed + in-memory) only (no RustFS)
+#   - redis   : Redis State Backend only (Compose redis service)
+#   - valkey  : Valkey State Backend only (Compose valkey service)
+#
+# redis / valkey are NOT included in layer=all service startup (approved).
 #
 # Legacy workflow file `e2e-object-recovery.yml` remains as a thin alias
 # that runs layer=object for bookmarks / older docs.
@@ -29,6 +33,8 @@ on:
           - file
           - memory
           - libsql
+          - redis
+          - valkey
 
 jobs:
   e2e:
@@ -46,7 +52,7 @@ jobs:
 
       - name: Start RustFS
         if: inputs.layer == 'all' || inputs.layer == 'object'
-        run: docker compose -f docker/e2e/docker-compose.yml up -d --wait
+        run: docker compose -f docker/e2e/docker-compose.yml up -d --wait rustfs
 
       - name: Wait for RustFS health
         if: inputs.layer == 'all' || inputs.layer == 'object'
@@ -59,8 +65,16 @@ jobs:
             sleep 1
           done
           echo "RustFS did not become healthy"
-          docker compose -f docker/e2e/docker-compose.yml logs
+          docker compose -f docker/e2e/docker-compose.yml logs rustfs
           exit 1
+
+      - name: Start Redis
+        if: inputs.layer == 'redis'
+        run: docker compose -f docker/e2e/docker-compose.yml up -d --wait redis
+
+      - name: Start Valkey
+        if: inputs.layer == 'valkey'
+        run: docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
 
       - name: Run E2E — all layers
         if: inputs.layer == 'all'
@@ -99,6 +113,30 @@ jobs:
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1 -timeout 10m
 
+      - name: Run E2E — Redis State
+        if: inputs.layer == 'redis'
+        env:
+          ES4_E2E_REDIS_URL: redis://127.0.0.1:6379/0
+          ES4_E2E_REQUIRE_REDIS: "1"
+        working-directory: packages/go
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1 -timeout 10m
+
+      - name: Run E2E — Valkey State
+        if: inputs.layer == 'valkey'
+        env:
+          ES4_E2E_VALKEY_URL: redis://127.0.0.1:6380/0
+          ES4_E2E_REQUIRE_VALKEY: "1"
+        working-directory: packages/go
+        run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1 -timeout 10m
+
       - name: Tear down RustFS
         if: always() && (inputs.layer == 'all' || inputs.layer == 'object')
         run: docker compose -f docker/e2e/docker-compose.yml down -v
+
+      - name: Tear down Redis
+        if: always() && inputs.layer == 'redis'
+        run: docker compose -f docker/e2e/docker-compose.yml stop redis && docker compose -f docker/e2e/docker-compose.yml rm -f -v redis
+
+      - name: Tear down Valkey
+        if: always() && inputs.layer == 'valkey'
+        run: docker compose -f docker/e2e/docker-compose.yml stop valkey && docker compose -f docker/e2e/docker-compose.yml rm -f -v valkey

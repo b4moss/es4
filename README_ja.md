@@ -28,17 +28,17 @@
 
 | Layer | Choices |
 |-------|---------|
-| State | Memory · on-disk SQLite (`state_path`) |
+| State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) |
 | Recovery | `file` · `libsql` (local) · `object` (S3-compatible) |
 | Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` · Tx: `BeginTx` → Commit/Rollback |
 | Server | HTTP Es4 Server + Docker image workflows |
-| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory (`workflow_dispatch`) |
+| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State (`workflow_dispatch`) |
 
 **対象外／未実装:**
 
 - Node.js / TypeScript 移植（`packages/node` はスタブ）
 - プロダクト E2E におけるリモート Turso（`libsql://`）
-- Redis／Valkey State アダプタ（未スケジュール）
+- Firestore State アダプタ（v0.8.0 の次 PR）
 - 公開 `SnapshotNow` API（明示フラッシュは `export_test.go` の**テスト用ヘルパ**のみ）
 
 ## Install（インストール）
@@ -195,23 +195,36 @@ es4.Open(ctx, options.Options{
 
 任意: `recovery_ttl`（Go duration。`0` は最新世代のみ保持）、認証付き DSN 用の `recovery_libsql_auth_token`。
 
-### Product E2E — 4 つの workflow 層を実行する
+**Redis／Valkey State**（同一アダプタ。`valkey` はエイリアス）
+
+```go
+es4.Open(ctx, options.Options{
+    StateBackend:        options.StateBackendRedis, // or StateBackendValkey
+    StateRedisURL:       "redis://127.0.0.1:6379/0",
+    StateRedisKeyPrefix: "myapp/prod/", // 任意。空なら HASH es4:state
+    SnapshotInterval:    0,
+})
+```
+
+### Product E2E — workflow 層を実行する
 
 E2E は**手動のみ**（`.github/workflows/e2e.yml`、`workflow_dispatch`）。入力 `layer`:
 
-| `layer` | What runs | RustFS |
-|---------|-----------|--------|
-| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | Required |
-| `object` | `TestE2E_ObjectRecovery_*` | Required |
+| `layer` | What runs | Extra service |
+|---------|-----------|---------------|
+| `all` | `go test -tags=e2e ./...` (every `//go:build e2e` package) | RustFS 必須。Redis／Valkey は URL 未設定なら skip |
+| `object` | `TestE2E_ObjectRecovery_*` | RustFS |
 | `file` | `TestE2E_FileSQLite_*` | No |
 | `memory` | `TestE2E_Memory_*` | No |
 | `libsql` | `TestE2E_LibSQL*` (File C1–C5 + Memory C2/C4/C5) | No |
+| `redis` | `TestE2E_RedisState_*` | Compose `redis` |
+| `valkey` | `TestE2E_ValkeyState_*` | Compose `valkey` |
 
 ローカルコマンド（リポジトリルート／`packages/go` から）:
 
 ```bash
 # Object needs RustFS first
-docker compose -f docker/e2e/docker-compose.yml up -d --wait
+docker compose -f docker/e2e/docker-compose.yml up -d --wait rustfs
 export AWS_ACCESS_KEY_ID=es4e2eaccess
 export AWS_SECRET_ACCESS_KEY=es4e2esecretkey
 export ES4_E2E_S3_ENDPOINT=http://127.0.0.1:9000
@@ -228,6 +241,16 @@ go test -tags=e2e ./pkg/es4 -run 'TestE2E_FileSQLite_' -count=1 -timeout 10m
 
 # memory (no RustFS)
 go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1 -timeout 10m
+
+# Redis State
+docker compose -f docker/e2e/docker-compose.yml up -d --wait redis
+export ES4_E2E_REDIS_URL=redis://127.0.0.1:6379/0
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1 -timeout 10m
+
+# Valkey State
+docker compose -f docker/e2e/docker-compose.yml up -d --wait valkey
+export ES4_E2E_VALKEY_URL=redis://127.0.0.1:6380/0
+go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1 -timeout 10m
 ```
 
 Compose の既定とクリーンアップ: [`docker/e2e/README.md`](./docker/e2e/README.md)。振る舞いカタログ: [`docs/tests/e2e/e2e-spec.md`](./docs/tests/e2e/e2e-spec.md)。
@@ -240,6 +263,8 @@ Compose の既定とクリーンアップ: [`docker/e2e/README.md`](./docker/e2e
 | File SQLite | `packages/go/pkg/es4/file_sqlite_e2e_test.go` |
 | Memory | `packages/go/pkg/es4/memory_e2e_test.go` |
 | libSQL File / Memory | `libsql_file_e2e_test.go` · `libsql_memory_e2e_test.go` |
+| Redis State | `redis_state_e2e_test.go` |
+| Valkey State | `valkey_state_e2e_test.go` |
 
 ### Writing / running libSQL E2E
 

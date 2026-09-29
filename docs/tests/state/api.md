@@ -9,7 +9,7 @@
 
 - 階層キー（`/`）と任意 JSON 値に対する CRUD。同一プロセス内は内部ロックで直列化。
 - 呼び出しは `context.Context` 付きの同期 API（非同期志向）。
-- Memory / SQLite で同じ公開契約。
+- Memory / SQLite / Redis で同じ公開契約。
 
 #### テスト：正常系
 - `SET` したキーを `GET` で同じ JSON として読める
@@ -25,9 +25,9 @@
 - 不正 JSON 値（`nil`／空／構文不正）→ `ErrInvalidValue`
 - キャンセル済み `context` → `context` エラー
 
-### Store 契約（テーブル駆動・Memory と SQLite 両方）
+### Store 契約（テーブル駆動・Memory / SQLite / Redis）
 
-同一テストテーブルを両 Backend で実行する（`contract_test.go`）。
+同一テストテーブルを各 Backend で実行する（`contract_test.go`。Redis は miniredis）。
 
 #### テスト：正常系
 - Set → Get → Exists true → Delete → Exists false → Get は `ErrNotFound`
@@ -55,14 +55,14 @@
 
 #### テスト: 異常系
 - Close 後の Set／Get／Delete／Exists／Clear／Export／Replace／BeginTx → `ErrClosed`（または wrap）
-- 二重 Close は Memory／SQLite とも冪等（エラーなし）
+- 二重 Close は Memory／SQLite／Redis とも冪等（エラーなし）
 
-### Memory / SQLite Export / Replace ラウンドトリップ
+### Memory / SQLite / Redis Export / Replace ラウンドトリップ
 
 - Snapshot / Restore 用のアダプタ内部 API。論理 `{entries}` 形式。
 
 #### テスト：正常系
-- `Export` の結果を別 Memory / SQLite へ `Replace` すると同じ内容になる（相互に同じ entries）
+- `Export` の結果を別 Memory / SQLite / Redis へ `Replace` すると同じ内容になる（相互に同じ entries）
 
 ### SQLite 永続
 
@@ -74,10 +74,22 @@
 #### テスト: 異常系
 - 開けない path → Open エラー
 
+### Redis 永続・隔離
+
+#### テスト：正常系
+- Close → 再 Open（同 URL／prefix）で内容が残る（miniredis 可）
+- 別 `state_redis_key_prefix` は非干渉
+- Tx Rollback 後は外側に見えない
+
+#### テスト: 異常系
+- `state_backend=redis|valkey` で URL 空 → Validate エラー
+
 ### Open 配線
 
 #### テスト：正常系
-- `memory_only` → Memory
+- `memory_only` → Memory（redis 設定があっても redis に書かない）
+- `state_backend=redis|valkey` + URL → Redis アダプタ
+- `state_backend=memory` → Memory（`state_path` 無視可）
 - `state_path` 非空 → SQLite
 - `state_path` 空 → Memory
 - `OpenWith` 注入が優先

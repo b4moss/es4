@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/b4moss/es4/packages/go/internal/state"
 )
 
-// storeFactories drive the same Store contract against Memory and SQLite.
+// storeFactories drive the same Store contract against Memory, SQLite, and Redis.
 func storeFactories(t *testing.T) map[string]func(t *testing.T) state.Store {
 	t.Helper()
 	return map[string]func(t *testing.T) state.Store{
@@ -30,6 +31,17 @@ func storeFactories(t *testing.T) map[string]func(t *testing.T) state.Store {
 			}
 			t.Cleanup(func() { _ = s.Close() })
 			return s
+		},
+		"Redis": func(t *testing.T) state.Store {
+			t.Helper()
+			mr := miniredis.RunT(t)
+			// Unique HASH per test name so parallel contract cases do not collide.
+			st, err := state.OpenRedis(context.Background(), "redis://"+mr.Addr(), "contract/"+t.Name()+"/")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = st.Close() })
+			return st
 		},
 	}
 }

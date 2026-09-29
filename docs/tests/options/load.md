@@ -13,6 +13,7 @@ Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/spec
 - `recovery_path` / `recovery_backend` / libsql・s3 キーは空
 - `recovery_ttl` は `0`
 - `state_path` は空文字
+- `state_backend` / `state_redis_url` / `state_redis_key_prefix` は空
 
 ### Load（defaults → 任意 YAML → env）
 
@@ -35,16 +36,17 @@ Options（設定）の単体テスト仕様。正本の振る舞い: [`docs/spec
 - bool 系キーが小文字の `true` / `false` 以外 → エラー
 - 不正 `recovery_backend` → エラー
 - 負の `recovery_ttl` → エラー
-- backend 必須キー欠落（file/path・libsql/url・object/bucket）→ Validate エラー（`memory_only` 時はスキップ）
+- backend 必須キー欠落（file/path・libsql/url・object/bucket・redis/url・sqlite/path）→ Validate エラー（`memory_only` 時はスキップ）
+- 不正 `state_backend` → エラー
 
 ### Effective（memory_only）
 
-- `memory_only` が `true` のとき Recovery 関連設定と `state_path` は無視する（設定エラーにはしない）
+- `memory_only` が `true` のとき Recovery 関連設定と `state_path`／`state_backend`／redis 系は無視する（設定エラーにはしない）
 
 #### テスト：正常系
 - `memory_only` `false` なら Effective は入力と同じ（memory_only off）
-- `memory_only` `true` なら `recovery_*`・`snapshot_interval`・`restore_on_startup`・`state_path` は無視相当（空／ゼロ／false）になる（memory_only on）
-- 生の Options に Recovery / state_path 値が残っていてもエラーにしない
+- `memory_only` `true` なら `recovery_*`・`snapshot_interval`・`restore_on_startup`・`state_path`・`state_backend`・`state_redis_*` は無視相当（空／ゼロ／false）になる（memory_only on）
+- 生の Options に Recovery / state_path / redis 値が残っていてもエラーにしない
 
 ----
 
