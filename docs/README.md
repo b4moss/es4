@@ -3,7 +3,7 @@
 プロダクトの意味的な pillar 正本（目的・スコープ・技術方針のハブ）。  
 OKF の版索引は [`index.md`](./index.md)（`okf_version` のみ）。本文はここに書く。
 
-実装前の構想を含む。現行の振る舞い仕様は [`specs/`](./specs/)（Options / State / Snapshot / Recovery）。これからやる内容は [`roadmap.md`](./roadmap.md) と [`plans/`](./plans/) を参照。
+実装前の構想を含む。現行の振る舞い仕様は [`specs/`](./specs/)（Options / State / Tx / Snapshot / Recovery / Es4 Server）。これからやる内容は [`roadmap.md`](./roadmap.md) と [`plans/`](./plans/) を参照。
 
 ## 目的・動機（開発の同期）
 
@@ -140,7 +140,7 @@ flowchart LR
 - [Phase 1 仕様](./specs/state/) — State / [Snapshot](./specs/snapshot/) / [Recovery](./specs/recovery/) / [Options](./specs/options/)（`v0.2.0` 実装完了・plans から移動済み）
 - [Phase 2 仕様](./specs/state/) — SQLite State / [Tx](./specs/tx/) / [Snapshot](./specs/snapshot/) / [Options](./specs/options/)（`v0.3.0` 実装完了・plans から移動済み）
 - [Phase 3 Recovery / Options](./specs/recovery/) — libSQL / Object・世代 TTL・GCS＝S3 互換
-- [Phase 4 決定事項](./plans/v0.5.0/es4-server.md#決定事項) — HTTP REST・`ES4_` 環境変数・Health／Cloud Run
+- [Phase 4 仕様](./specs/es4-server/) — HTTP Es4 Server・Docker・Health（末尾 `/` なし。`v0.5.0` 実装完了・plans から移動済み）
 - [Phase 5 決定事項](./plans/v0.6.0/state-backend-extension.md#決定事項) — その他／Redis・Valkey Unscheduled・最適化境界
 - [open-questions](./plans/open-questions.md) — 未決プロダクト論点（**残件なし**）
 - [wishlist](./wishlist.md) — PO メモ（未整理）
