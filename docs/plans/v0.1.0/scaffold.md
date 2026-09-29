@@ -13,20 +13,43 @@
 
 - 必要なディレクトリツリーを **`.gitkeep` のみ**で追加する
 - 正確なパッケージ分割は [open-questions P8](../open-questions.md) 未決のため、以下は **暫定プレースホルダ**とする（公開 API を固定しない）
+- 多言語ポートと Docker を見据え、言語別コードは `packages/<lang>/` 配下、コンテナ関連は `docker/` に置く
 
-暫定トップレベル（空ディレクトリ）:
+暫定ツリー（空ディレクトリ + `.gitkeep`）:
 
-- `internal/state/`
-- `internal/snapshot/`
-- `internal/recovery/`
-- `internal/config/`
+```
+es4/
+├── docs/                         # OKF 文書（本マイルストーンでは触らない）
+├── packages/
+│   ├── go/
+│   │   ├── cmd/
+│   │   │   └── es4-server/       # Server エントリ（実装は後続 Phase）
+│   │   ├── internal/
+│   │   │   ├── state/
+│   │   │   ├── snapshot/
+│   │   │   ├── recovery/
+│   │   │   └── config/
+│   │   └── pkg/                  # 公開 API プレースホルダ
+│   └── node/
+│       └── src/                  # Node.js / TypeScript ポート用（Go 版の後）
+├── docker/                       # コンテナ関連（Dockerfile は Server 実装時に追加）
+└── scripts/                      # 補助スクリプト用（任意）
+```
 
-既存の `docs/specs/`・`docs/tests/` はそのまま（空プレースホルダでよい）。
+配置の意図:
+
+- **Server** は `packages/go/cmd/es4-server/` に置く
+- **ライブラリ**（State / Snapshot / Recovery / config および公開面）は `packages/<lang>/` 配下
+- **Docker** は言語ツリーの外（`docker/`）。本マイルストーンでは `.gitkeep` のみ。`Dockerfile` は Go Server のビルドが始まるときに追加する（compose も後続）
+
+既存の `docs/specs/`・`docs/tests/` はそのまま（空プレースホルダでよい）。  
+ルート直下の `internal/` は置かない（旧プレースホルダは廃止）。
 
 ## 範囲外
 
 - State / Snapshot / Recovery の振る舞い実装
 - `go.mod` や Go / TypeScript のソース追加
+- `Dockerfile` / compose の実装
 - `docs/specs/`・`docs/tests/` への仕様記入
 
 ## メモ
