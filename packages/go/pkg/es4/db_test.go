@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/b4moss/es4/packages/go/internal/recovery"
 	"github.com/b4moss/es4/packages/go/internal/state"
 	"github.com/b4moss/es4/packages/go/pkg/es4"
 	"github.com/b4moss/es4/packages/go/pkg/options"
@@ -675,4 +676,171 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func TestOpen_RecoveryBackendSelection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("empty_backend_with_path_is_file", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "rp.json")
+		db, err := es4.OpenWith(ctx, es4.OpenConfig{
+			Options: options.Options{
+				RecoveryPath:     path,
+				SnapshotInterval: 0,
+				RestoreOnStartup: false,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		rec := db.RecoveryForTest()
+		if _, ok := rec.(*recovery.File); !ok {
+			t.Fatalf("want *recovery.File, got %T", rec)
+		}
+	})
+
+	t.Run("libsql_file_url", func(t *testing.T) {
+		t.Parallel()
+		dbPath := filepath.Join(t.TempDir(), "rec.db")
+		db, err := es4.OpenWith(ctx, es4.OpenConfig{
+			Options: options.Options{
+				RecoveryBackend:  "libsql",
+				RecoveryLibSQLURL: "file:" + dbPath,
+				SnapshotInterval: 0,
+				RestoreOnStartup: false,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if _, ok := db.RecoveryForTest().(*recovery.LibSQL); !ok {
+			t.Fatalf("want *recovery.LibSQL, got %T", db.RecoveryForTest())
+		}
+		_ = db.Set(ctx, "k", json.RawMessage(`1`))
+		if err := db.SnapshotNow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		db2, err := es4.OpenWith(ctx, es4.OpenConfig{
+			Options: options.Options{
+				RecoveryBackend:   "libsql",
+				RecoveryLibSQLURL: "file:" + dbPath,
+				SnapshotInterval:  0,
+				RestoreOnStartup:  true,
+			},
+			SkipAsyncRestore: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db2.Close() })
+		got, err := db2.Get(ctx, "k")
+		if err != nil || string(got) != "1" {
+			t.Fatalf("got %s err=%v", got, err)
+		}
+	})
+
+	t.Run("libsql_url_required", func(t *testing.T) {
+		t.Parallel()
+		_, err := es4.Open(ctx, options.Options{RecoveryBackend: "libsql", SnapshotInterval: 0})
+		if err == nil {
+			t.Fatal("want error when libsql url missing")
+		}
+	})
+
+	t.Run("object_bucket_required", func(t *testing.T) {
+		t.Parallel()
+		_, err := es4.Open(ctx, options.Options{RecoveryBackend: "object", SnapshotInterval: 0})
+		if err == nil {
+			t.Fatal("want error when bucket missing")
+		}
+	})
+
+	t.Run("object_injection_openwith", func(t *testing.T) {
+		t.Parallel()
+		fake := recovery.NewMemoryObject()
+		store, err := recovery.NewObject(recovery.ObjectConfig{
+			Bucket: "b",
+			Prefix: "p",
+			Client: fake,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		db, err := es4.OpenWith(ctx, es4.OpenConfig{
+			Options: options.Options{
+				RecoveryBackend:  "object",
+				RecoveryS3Bucket: "would-use-aws",
+				SnapshotInterval: 0,
+				RestoreOnStartup: false,
+			},
+			Recovery: store,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if db.RecoveryForTest() != store {
+			t.Fatal("OpenWith recovery injection must win")
+		}
+		_ = db.Set(ctx, "a", json.RawMessage(`true`))
+		if err := db.SnapshotNow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		keys, _ := fake.ListObjectKeys(ctx, "b", "p/")
+		if len(keys) != 1 {
+			t.Fatalf("want 1 object, got %v", keys)
+		}
+	})
+
+	t.Run("memory_only_ignores_recovery", func(t *testing.T) {
+		t.Parallel()
+		db, err := es4.Open(ctx, options.Options{
+			MemoryOnly:        true,
+			RecoveryBackend:   "libsql",
+			RecoveryLibSQLURL: "file:" + filepath.Join(t.TempDir(), "x.db"),
+			RecoveryPath:      filepath.Join(t.TempDir(), "r.json"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if db.RecoveryForTest() != nil {
+			t.Fatal("memory_only must skip recovery adapter")
+		}
+	})
+
+	t.Run("file_ttl_generations_restore", func(t *testing.T) {
+		t.Parallel()
+		dir := filepath.Join(t.TempDir(), "gens")
+		opts := options.Options{
+			RecoveryPath:     dir,
+			RecoveryBackend:  "file",
+			RecoveryTTL:      time.Hour,
+			SnapshotInterval: 0,
+			RestoreOnStartup: true,
+		}
+		db1, err := es4.OpenWith(ctx, es4.OpenConfig{Options: opts, SkipAsyncRestore: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = db1.Set(ctx, "g", json.RawMessage(`9`))
+		if err := db1.SnapshotNow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		_ = db1.Close()
+
+		db2, err := es4.OpenWith(ctx, es4.OpenConfig{Options: opts, SkipAsyncRestore: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db2.Close() })
+		got, err := db2.Get(ctx, "g")
+		if err != nil || string(got) != "9" {
+			t.Fatalf("got %s err=%v", got, err)
+		}
+	})
 }

@@ -1,6 +1,6 @@
 # Snapshot 仕様
 
-内部 Snapshot の正本（公開 API ではない）。Phase 1 / SemVer `v0.2.0`、Phase 2 でも論理 entries 封筒を維持。
+内部 Snapshot の正本（公開 API ではない）。Phase 1–3 / SemVer `v0.2.0`–`v0.4.0`。論理 entries 封筒を維持（DB／オブジェクト生コピーなし）。
 
 ## 概要
 

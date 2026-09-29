@@ -1,6 +1,6 @@
 # Options（設定）仕様
 
-現行バージョンに存在する振る舞いの正本（Phase 1 / Phase 2）。  
+現行バージョンに存在する振る舞いの正本（Phase 1–3）。  
 State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 
 ## 概要
@@ -14,7 +14,15 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 | `snapshot_interval` | Go duration 文字列のみ | `30s` | `ES4_SNAPSHOT_INTERVAL` |
 | `restore_on_startup` | bool（小文字 `true`/`false` のみ） | `true` | `ES4_RESTORE_ON_STARTUP` |
 | `memory_only` | bool（小文字 `true`/`false` のみ） | `false` | `ES4_MEMORY_ONLY` |
-| `recovery_path` | string（ファイルパス） | `""` | `ES4_RECOVERY_PATH` |
+| `recovery_path` | string（ファイル／世代ディレクトリ） | `""` | `ES4_RECOVERY_PATH` |
+| `recovery_backend` | string（`file` \| `libsql` \| `object`） | `""` | `ES4_RECOVERY_BACKEND` |
+| `recovery_ttl` | Go duration 文字列のみ | `0`（最新のみ） | `ES4_RECOVERY_TTL` |
+| `recovery_libsql_url` | string | `""` | `ES4_RECOVERY_LIBSQL_URL` |
+| `recovery_libsql_auth_token` | string | `""` | `ES4_RECOVERY_LIBSQL_AUTH_TOKEN` |
+| `recovery_s3_bucket` | string | `""` | `ES4_RECOVERY_S3_BUCKET` |
+| `recovery_s3_prefix` | string | `""` | `ES4_RECOVERY_S3_PREFIX` |
+| `recovery_s3_region` | string | `""` | `ES4_RECOVERY_S3_REGION` |
+| `recovery_s3_endpoint` | string | `""` | `ES4_RECOVERY_S3_ENDPOINT` |
 | `state_path` | string（オンディスク SQLite パス） | `""` | `ES4_STATE_PATH` |
 
 ## 振る舞い
@@ -24,29 +32,40 @@ State / Snapshot / Recovery / Tx の正本は各ドメイン specs を参照。
 - 前提: Options が正本。設定ファイルは Options を補う入力。
 - 手順: `Defaults` →（任意）YAML ファイル →（任意）env overlay
 - 空の env 値は未設定としてスキップする（下位レイヤの値をクリアしない）
-- 例外: ファイル欠落（パス指定時）／不正 YAML／不正 duration・bool はエラー
+- 例外: ファイル欠落（パス指定時）／不正 YAML／不正 duration・bool／不正 `recovery_backend`／負の `recovery_ttl` はエラー
+- `Load` / `FromFile` は組み立て後に `Validate()` する
 
 ### 設定ファイル
 
 - 形式: **YAML のみ**（JSON は対象外）。キーは上表の `snake_case`
-- `snapshot_interval` は **Go duration 文字列のみ**（例: `"30s"`）。数値秒（`30` / `"30"`）は拒否
+- duration は **Go duration 文字列のみ**（例: `"30s"` / `"24h"`）。数値秒（`30` / `"30"`）は拒否
 - bool は **小文字の `true` / `false` のみ**。`True` / `TRUE` / `on` / `off` / `1` / `0` などは拒否
 
 ### 環境変数
 
 - 接頭辞 `ES4_` + SCREAMING_SNAKE（例: `snapshot_interval` → `ES4_SNAPSHOT_INTERVAL`）
-- duration / bool の受理規則は設定ファイルと同じ（Go duration 文字列のみ、小文字 `true`/`false` のみ）
-- 空文字は未設定扱い（スキップ）。下位の値を消さない
+- duration / bool の受理規則は設定ファイルと同じ
+- 空文字は未設定扱い（スキップ）。下位の値を消さない（`recovery_libsql_auth_token` も同様）
 
 ### memory_only と Recovery / state_path
 
 - 前提: `memory_only` が `true`
-- 手順: Recovery 関連設定（`recovery_path`・`snapshot_interval`・`restore_on_startup`）および `state_path` は**無視して続行**する。設定エラーにはしない
-- 下流の Snapshot / Recovery / Open は `Effective()` の値を消費する（`Effective()` は `state_path` もクリアする）
+- 手順: Recovery 関連設定（`recovery_*`・`snapshot_interval`・`restore_on_startup`）および `state_path` は**無視して続行**する。設定エラーにはしない（必須キー検査もスキップ）
+- 下流の Snapshot / Recovery / Open は `Effective()` の値を消費する（`Effective()` は上記をクリアする）
 
-### recovery_path
+### recovery_backend
 
-- Recovery のファイルパスは Options の `recovery_path` で渡す
+- 値: `file` \| `libsql` \| `object`。それ以外はエラー
+- 空かつ `recovery_path` 非空 → `file` とみなす
+- 空かつ `recovery_path` 空 → Recovery Adapter なし
+- `file` → `recovery_path` 必須
+- `libsql` → `recovery_libsql_url` 必須
+- `object` → `recovery_s3_bucket` 必須
+- Object 認証は Options 外の標準 AWS 系 env（SDK 既定）
+
+### recovery_ttl
+
+- 既定 `0` = 最新世代のみ。正 = Save 後に古い世代を剪定。負はエラー
 
 ### state_path
 
