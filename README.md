@@ -13,7 +13,7 @@ Embedded server-side state store with pluggable Recovery — for when you want d
 
 Product knowledge lives under **[`docs/`](./docs/)** (OKF). This root README is the canonical English entry for install and usage; deeper specs and plans stay in `docs/`.
 
-Current monorepo line: **Git tag `v0.7.3`** (Go library module path still `github.com/b4moss/es4/packages/go`).
+Current monorepo line: **Git tag `v0.8.0`** (Go library). Node.js／TypeScript port is **`packages/node`** (v0.9.0; private workspace package, not npm-published yet).
 
 ## Purpose
 
@@ -34,12 +34,21 @@ Current monorepo line: **Git tag `v0.7.3`** (Go library module path still `githu
 | Server | HTTP Es4 Server + Docker image workflows |
 | E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore **not** in `layer=all`) |
 
+**Also in scope (Node at `packages/node`, milestone v0.9.0):**
+
+| Layer | Choices |
+|-------|---------|
+| State | Memory · SQLite · Redis／Valkey · Firestore (same Options vocabulary as Go) |
+| Recovery | `file` · `libsql` (local) · `object` (S3-compatible) — internal only |
+| Public API | `open` / `close` · State · Tx · HTTP Es4 Server |
+| E2E | Same layers／catalog IDs as Go (`npm run test:e2e:<layer>`) |
+
 **Out of scope / not yet:**
 
-- Node.js / TypeScript port (`packages/node` is a stub)
+- npm publish of `@b4moss/es4` (workspace-private until instructed)
 - Remote Turso (`libsql://`) in product E2E
 - Production GCP-required Firestore E2E (Emulator only)
-- Public `SnapshotNow` API (explicit flush exists only as a **test helper** in `export_test.go`)
+- Public `SnapshotNow` API (explicit flush exists only as a **test helper**)
 
 ## Install
 
@@ -74,6 +83,25 @@ go run ./cmd/es4-server
 ```
 
 Server options load from `ES4_*` env (same snake_case keys as library Options). See [`docs/specs/es4-server/`](./docs/specs/es4-server/).
+
+### Node.js / TypeScript (`packages/node`)
+
+**Requirements:** Node.js **20+**. Workspace-private package `@b4moss/es4` (see [`packages/node/README.md`](./packages/node/README.md)).
+
+```bash
+cd packages/node
+npm ci
+npm test
+npm run test:e2e:memory   # file|libsql|object|redis|valkey|firestore
+```
+
+```ts
+import { open, defaults } from "@b4moss/es4";
+
+const db = await open({ ...defaults(), memory_only: true });
+await db.set("hello", JSON.stringify({ n: 1 }));
+await db.close();
+```
 
 ## Quick start
 

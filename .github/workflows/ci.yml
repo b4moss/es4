@@ -1,6 +1,7 @@
 name: CI
 
-# Unit CI for packages/go. Product E2E stays in e2e.yml (workflow_dispatch only).
+# Unit CI for packages/go and packages/node.
+# Product E2E stays in e2e.yml (workflow_dispatch only).
 # Badge / Codecov upload runs only on main push.
 on:
   push:
@@ -8,6 +9,7 @@ on:
       - main
     paths:
       - "packages/go/**"
+      - "packages/node/**"
       - ".github/workflows/ci.yml"
       - "codecov.yml"
   pull_request:
@@ -17,6 +19,7 @@ on:
       - "dev-v*"
     paths:
       - "packages/go/**"
+      - "packages/node/**"
       - ".github/workflows/ci.yml"
       - "codecov.yml"
 
@@ -64,3 +67,30 @@ jobs:
           files: packages/go/coverage.out
           disable_search: true
           fail_ci_if_error: false
+
+  node:
+    name: packages/node
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/node
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Test
+        run: npm test

@@ -4,7 +4,7 @@
 # Start from the GitHub Actions UI (workflow_dispatch).
 #
 # Input `layer`:
-#   - all       : RustFS + full `go test -tags=e2e ./...` (Redis/Valkey/Firestore skip unless env set)
+#   - all       : RustFS + full suite (Redis/Valkey/Firestore skip unless env set)
 #   - object    : RustFS + Object Recovery tests only (strict RustFS required)
 #   - file      : File SQLite layer only (no RustFS)
 #   - memory    : In-memory layer only (no RustFS)
@@ -12,6 +12,11 @@
 #   - redis     : Redis State Backend only (Compose redis service)
 #   - valkey    : Valkey State Backend only (Compose valkey service)
 #   - firestore : Firestore State Backend only (Compose firestore emulator)
+#
+# Input `runtime`:
+#   - go   : Go E2E only (default; preserves prior behavior)
+#   - node : Node E2E only (`packages/node`)
+#   - both : Go then Node
 #
 # redis / valkey / firestore are NOT included in layer=all service startup (approved).
 #
@@ -37,20 +42,43 @@ on:
           - redis
           - valkey
           - firestore
+      runtime:
+        description: Runtime to exercise
+        required: true
+        type: choice
+        default: go
+        options:
+          - go
+          - node
+          - both
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Go
+        if: inputs.runtime == 'go' || inputs.runtime == 'both'
         uses: actions/setup-go@v5
         with:
           go-version-file: packages/go/go.mod
           cache-dependency-path: packages/go/go.sum
+
+      - name: Set up Node
+        if: inputs.runtime == 'node' || inputs.runtime == 'both'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
+
+      - name: Install Node deps
+        if: inputs.runtime == 'node' || inputs.runtime == 'both'
+        working-directory: packages/node
+        run: npm ci
 
       - name: Start RustFS
         if: inputs.layer == 'all' || inputs.layer == 'object'
@@ -82,8 +110,10 @@ jobs:
         if: inputs.layer == 'firestore'
         run: docker compose -f docker/e2e/docker-compose.yml up -d --wait firestore
 
-      - name: Run E2E — all layers
-        if: inputs.layer == 'all'
+      # ---- Go ----
+
+      - name: Run Go E2E — all layers
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'all'
         env:
           AWS_ACCESS_KEY_ID: es4e2eaccess
           AWS_SECRET_ACCESS_KEY: es4e2esecretkey
@@ -93,8 +123,8 @@ jobs:
         working-directory: packages/go
         run: go test -tags=e2e ./... -count=1 -timeout 10m
 
-      - name: Run E2E — object (S3 / RustFS)
-        if: inputs.layer == 'object'
+      - name: Run Go E2E — object (S3 / RustFS)
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'object'
         env:
           AWS_ACCESS_KEY_ID: es4e2eaccess
           AWS_SECRET_ACCESS_KEY: es4e2esecretkey
@@ -104,39 +134,39 @@ jobs:
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_ObjectRecovery_' -count=1 -timeout 10m
 
-      - name: Run E2E — file SQLite
-        if: inputs.layer == 'file'
+      - name: Run Go E2E — file SQLite
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'file'
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_FileSQLite_' -count=1 -timeout 10m
 
-      - name: Run E2E — memory
-        if: inputs.layer == 'memory'
+      - name: Run Go E2E — memory
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'memory'
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_Memory_' -count=1 -timeout 10m
 
-      - name: Run E2E — libSQL
-        if: inputs.layer == 'libsql'
+      - name: Run Go E2E — libSQL
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'libsql'
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_LibSQL' -count=1 -timeout 10m
 
-      - name: Run E2E — Redis State
-        if: inputs.layer == 'redis'
+      - name: Run Go E2E — Redis State
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'redis'
         env:
           ES4_E2E_REDIS_URL: redis://127.0.0.1:6379/0
           ES4_E2E_REQUIRE_REDIS: "1"
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_RedisState_' -count=1 -timeout 10m
 
-      - name: Run E2E — Valkey State
-        if: inputs.layer == 'valkey'
+      - name: Run Go E2E — Valkey State
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'valkey'
         env:
           ES4_E2E_VALKEY_URL: redis://127.0.0.1:6380/0
           ES4_E2E_REQUIRE_VALKEY: "1"
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_ValkeyState_' -count=1 -timeout 10m
 
-      - name: Run E2E — Firestore State
-        if: inputs.layer == 'firestore'
+      - name: Run Go E2E — Firestore State
+        if: (inputs.runtime == 'go' || inputs.runtime == 'both') && inputs.layer == 'firestore'
         env:
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
           ES4_E2E_FIRESTORE_PROJECT_ID: demo-es4
@@ -144,6 +174,71 @@ jobs:
           ES4_TEST_REQUIRE_FIRESTORE: "1"
         working-directory: packages/go
         run: go test -tags=e2e ./pkg/es4 -run 'TestE2E_FirestoreState_' -count=1 -timeout 10m
+
+      # ---- Node ----
+
+      - name: Run Node E2E — all (memory+file+libsql+object; redis/valkey/firestore skipped)
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'all'
+        env:
+          AWS_ACCESS_KEY_ID: es4e2eaccess
+          AWS_SECRET_ACCESS_KEY: es4e2esecretkey
+          ES4_E2E_S3_ENDPOINT: http://127.0.0.1:9000
+          ES4_E2E_S3_REGION: us-east-1
+          ES4_E2E_REQUIRE_RUSTFS: "1"
+          ES4_E2E_LAYER: all
+        working-directory: packages/node
+        run: npm run test:e2e
+
+      - name: Run Node E2E — object
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'object'
+        env:
+          AWS_ACCESS_KEY_ID: es4e2eaccess
+          AWS_SECRET_ACCESS_KEY: es4e2esecretkey
+          ES4_E2E_S3_ENDPOINT: http://127.0.0.1:9000
+          ES4_E2E_S3_REGION: us-east-1
+          ES4_E2E_REQUIRE_RUSTFS: "1"
+        working-directory: packages/node
+        run: npm run test:e2e:object
+
+      - name: Run Node E2E — file
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'file'
+        working-directory: packages/node
+        run: npm run test:e2e:file
+
+      - name: Run Node E2E — memory
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'memory'
+        working-directory: packages/node
+        run: npm run test:e2e:memory
+
+      - name: Run Node E2E — libsql
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'libsql'
+        working-directory: packages/node
+        run: npm run test:e2e:libsql
+
+      - name: Run Node E2E — redis
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'redis'
+        env:
+          ES4_E2E_REDIS_URL: redis://127.0.0.1:6379/0
+          ES4_E2E_REQUIRE_REDIS: "1"
+        working-directory: packages/node
+        run: npm run test:e2e:redis
+
+      - name: Run Node E2E — valkey
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'valkey'
+        env:
+          ES4_E2E_VALKEY_URL: redis://127.0.0.1:6380/0
+          ES4_E2E_REQUIRE_VALKEY: "1"
+        working-directory: packages/node
+        run: npm run test:e2e:valkey
+
+      - name: Run Node E2E — firestore
+        if: (inputs.runtime == 'node' || inputs.runtime == 'both') && inputs.layer == 'firestore'
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+          ES4_E2E_FIRESTORE_PROJECT_ID: demo-es4
+          ES4_E2E_REQUIRE_FIRESTORE: "1"
+        working-directory: packages/node
+        run: npm run test:e2e:firestore
 
       - name: Tear down RustFS
         if: always() && (inputs.layer == 'all' || inputs.layer == 'object')

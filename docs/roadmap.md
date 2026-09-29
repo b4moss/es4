@@ -15,7 +15,8 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 | `v0.7.1`（暫定） | Phase 6 追補 — E2E 三層 | **実装完了**（File SQLite／In-memory・`e2e.yml` layer。Git タグは未打） | 共通カタログに沿い File／Memory 層を追加（S3 §5 は維持） | [tests/e2e](./tests/e2e/) · [plans/v0.7.1](./plans/v0.7.1/) |
 | `v0.7.2`（暫定） | Phase 6 追補 — GitHub Actions スイート | **実装完了**（CI／CodeQL／Scorecard／release／publish-go／docker。Git タグは未打） | B4MOSS 兄弟に揃えた標準 Actions を追加（E2E 手動は維持） | [plans/v0.7.2](./plans/v0.7.2/) · [.github/CI.md](../.github/CI.md) |
 | `v0.7.3`（暫定） | Phase 6 追補 — E2E libSQL Recovery | **実装完了**（File／InMemory・docs・`e2e.yml` layer=libsql。Git タグは未打） | 共通カタログに沿い libSQL File（C1–C5）／Memory（C2／C4／C5）を追加 | [tests/e2e](./tests/e2e/) · [plans/v0.7.3](./plans/v0.7.3/) |
-| `v0.8.0`（暫定） | Phase 7 — 外部サービスの充実（State Backend） | **実装中**（Redis／Valkey #29 マージ済み＋Firestore State + E2E。両 Backend 共存） | Redis／Valkey（同一アダプタ）と Firestore を State Backend として追加 | [plans/v0.8.0](./plans/v0.8.0/) · [specs/state](./specs/state/) · [tests/e2e](./tests/e2e/) |
+| `v0.8.0`（暫定） | Phase 7 — 外部サービスの充実（State Backend） | **実装完了**（Git タグ `v0.8.0`。Redis／Valkey＋Firestore State + E2E） | Redis／Valkey（同一アダプタ）と Firestore を State Backend として追加 | [plans/v0.8.0](./plans/v0.8.0/) · [specs/state](./specs/state/) · [tests/e2e](./tests/e2e/) |
+| `v0.9.0`（暫定） | Phase 8 — Node.js／TypeScript ポート | **実装中**（draft） | Go `v0.8.0` 契約を `packages/node` に同型移植（Options／State／Tx／Recovery／Server／E2E） | [plans/v0.9.0](./plans/v0.9.0/) |
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。
 
