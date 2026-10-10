@@ -4,10 +4,12 @@
 |------|-----|
 | 状態 | 方針合意ドラフト（こうきさん承認済み: Redis/Valkey スタイル `:`。v0.x 破壊的変更は許容） |
 | マイルストーン | [v0.10.0](https://github.com/b4moss/es4/milestone/1)（次 minor・現行リリース v0.9.0 の次） |
+| Tracking Issue | [#37](https://github.com/b4moss/es4/issues/37) |
+| Plans PR | [#36](https://github.com/b4moss/es4/pull/36)（base: `main`） |
 | 対象リポジトリ | [b4moss/es4](https://github.com/b4moss/es4) |
 | 開発方針の正本 | [b4moss/charter](https://github.com/b4moss/charter)（リポ `docs/charter/` 同梱） |
 | override | `docs/override-charter.md` は **現状設定なし** → 憲章どおり |
-| 関連計画 | ss-cachian: [es4 Layer Driver](https://github.com/b4moss/ss-cachian/blob/develop/docs/plans/v0.11.0/es4-layer-driver.md)（Milestone [v0.11.0](https://github.com/b4moss/ss-cachian/milestone/2)） |
+| 関連計画 | ss-cachian: [es4 Layer Driver](https://github.com/b4moss/ss-cachian/blob/develop/docs/plans/v0.11.0/es4-layer-driver.md)（Milestone [v0.11.0](https://github.com/b4moss/ss-cachian/milestone/2)・Issue [#68](https://github.com/b4moss/ss-cachian/issues/68)・PR [#67](https://github.com/b4moss/ss-cachian/pull/67)） |
 | 転記元 | Project Context 計画ドラフト（2026-10-10 転記） |
 
 **本ファイルの位置づけ:** es4 リポジトリ内 `docs/plans/` の正本（v0.10.0）。実装コードは別途。charter どおり実装 Agent は本ファイルを編集しない。
