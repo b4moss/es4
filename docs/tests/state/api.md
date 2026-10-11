@@ -1,13 +1,15 @@
 # State — テスト仕様
 
-公開 State API（`SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR`）および Adapter 内部契約（Export／Replace／Close）のテスト仕様。  
-正本の振る舞い: [`docs/specs/state/`](../../specs/state/)。
+公開 State API（`SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` / `SCAN`）および Adapter 内部契約（Export／Replace／Close）のテスト仕様。  
+正本の振る舞い: [`docs/specs/state/`](../../specs/state/)。  
+計画・決定: [`docs/plans/v0.10.0/key-delimiter.md`](../../plans/v0.10.0/key-delimiter.md)（2026-10-11）。
 
-実装: `packages/go/internal/state`（`store_test.go` · `contract_test.go` · `firestore_*.go`）と公開面の既存スイート。
+実装: `packages/go/internal/state`（`store_test.go` · `contract_test.go` · `firestore_*.go`）と公開面の既存スイート。Node パリティ同セマンティクス。
 
 ### Set / Get / Exists / Delete / Clear
 
-- 階層キー（`/`）と任意 JSON 値に対する CRUD。同一プロセス内は内部ロックで直列化。
+- 階層キー（区切り **`:`**）と任意 JSON 値に対する CRUD。同一プロセス内は内部ロックで直列化。
+- `/` は **通常文字として許可**（階層意味なし）。拒否は `:` 規則のみ（空・先頭 `:`・末尾 `:`・連続 `::`）。
 - 呼び出しは `context.Context` 付きの同期 API（非同期志向）。
 - Memory / SQLite / Redis / Firestore で同じ公開契約。
 
@@ -15,15 +17,35 @@
 - `SET` したキーを `GET` で同じ JSON として読める
 - `EXISTS` は存在するキーで `true`、欠落キーで `false`（エラーなし）
 - `CLEAR` は全消去する。空の State に対する `CLEAR` も成功する
-- 単一セグメント（`a`）と複数階層（`a/b/c`）のキーを扱える
+- 単一セグメント（`a`）と複数階層（`a:b:c`）のキーを扱える
+- キーに `/` を含めても合法（例: `a/b` は単一セグメント扱い。`a:b/c` も合法）
 - 有効 JSON の `null`／配列／オブジェクト／数値／文字列は `SET` 可能
 
 #### テスト: 異常系
 - `GET` 欠落キー → エラー（`ErrNotFound`）
 - `DELETE` 欠落キー → エラー（`ErrNotFound`）
-- 空キー / 先頭 `/` / 末尾 `/` / 連続 `//` → `ErrInvalidKey`（Set／Get／Delete／Exists）
+- 空キー / 先頭 `:` / 末尾 `:` / 連続 `::` → `ErrInvalidKey`（Set／Get／Delete／Exists／Scan）
 - 不正 JSON 値（`nil`／空／構文不正）→ `ErrInvalidValue`
 - キャンセル済み `context` → `context` エラー
+
+### Scan（v0.10.0）
+
+- `Scan(prefix) ([]string, error)` — prefix **前方一致**の論理キーを **一括**で返す（決定 B）。
+- **ページングなし**。上限・cursor は第一版に入れない。
+- **Tx 内可**（Tx 視界のキー集合を列挙）。
+- 順序は安定していれば実装任意（テストは集合一致でよい）。
+- 空結果は空スライス（エラーなし）。欠落プレフィックスでも成功。
+
+#### テスト：正常系
+- `a:b:1` / `a:b:2` / `a:c:1` を Set 後、`Scan("a:b")` は `a:b:1` と `a:b:2` のみ（集合一致）
+- `Scan("")` は全キーを返す（または契約どおり全列挙。空 prefix の扱いを実装で固定しテストする）
+- BeginTx → Set →（Commit 前）Tx 上 `Scan` で Tx 視界の新規キーが見える。Rollback 後は外側 Scan に出ない
+
+#### テスト: 異常系
+- 不正キー規則の prefix（先頭/末尾 `:`・連続 `::`）→ `ErrInvalidKey`（空 prefix を全列挙とするなら、空は正常系側）
+- Close 後の Scan → `ErrClosed`
+- キャンセル済み `context` → `context` エラー
+-（任意）巨大結果でもパニックせず一括で返す（ページング API は無い）
 
 ### Store 契約（テーブル駆動・Memory / SQLite / Redis）
 
@@ -34,6 +56,7 @@
 - Clear 後、投入キーの Exists が false。Export は空
 - Replace に複数 entries → 各キー Get 一致。旧キーは消える。空 Replace は全欠落
 - BeginTx → Set → Commit 後、外側 Get で見える
+- Set 複数 → Scan(prefix) の集合が期待と一致（全 Backend）
 
 #### テスト: 異常系
 - 両 Backend で無効キー／不正 JSON が同じ sentinel（`ErrInvalidKey`／`ErrInvalidValue`）
@@ -43,7 +66,8 @@
 `FIRESTORE_EMULATOR_HOST` 必須。未設定はローカル skip／CI（`ES4_TEST_REQUIRE_FIRESTORE=1`）は fail。
 
 #### キー写像
-- Doc ID = パス・パーセントエンコード（`a/b/c` → `a%2Fb%2Fc`）。Export キーは論理キー
+- Doc ID = パス・パーセントエンコード。論理区切り `:` → Doc ID 上 **`%3A`**（例: `a:b:c` → `a%3Ab%3Ac`）。Export キーは論理キー
+- Go / Node で同一論理キー ↔ Doc ID ラウンドトリップ
 - エンコード後 ID が 1500 バイト超過 → `ErrFirestoreDocIDTooLong`
 
 #### Clear 隔離（必須）
@@ -70,7 +94,7 @@
 ### Close 後
 
 #### テスト: 異常系
-- Close 後の Set／Get／Delete／Exists／Clear／Export／Replace／BeginTx → `ErrClosed`（または wrap）
+- Close 後の Set／Get／Delete／Exists／Clear／Scan／Export／Replace／BeginTx → `ErrClosed`（または wrap）
 - 二重 Close は Memory／SQLite／Redis／Firestore とも冪等（エラーなし）
 
 ### Memory / SQLite / Redis Export / Replace ラウンドトリップ
@@ -116,6 +140,11 @@
 #### テスト: 異常系
 - firestore 必須キー欠落 → Validate／Open エラー
 - 到達不能 `FIRESTORE_EMULATOR_HOST` → Open または初回操作でエラー
+
+### 破壊的移行メモ（tests 観点）
+
+- 旧 `/` 階層キーは新 `ValidateKey` では無効（`/` 自体は通常文字だが、旧「階層としての `/`」データは新規則の合法キーとは別物として扱う運用）。
+- 第一版は **自動マイグレーションなし**。短い「捨てて再投入」を前提（詳細は Recovery テスト・plans）。
 
 ----
 

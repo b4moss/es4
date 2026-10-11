@@ -10,14 +10,14 @@
 #### テスト：正常系
 - Begin → SET → Commit 後、State GET で見える
 - Begin → SET → Rollback 後、State GET は欠落
-- Tx 上の GET / EXISTS / DELETE / CLEAR が Tx 視界で動く
+- Tx 上の GET / EXISTS / DELETE / CLEAR / SCAN が Tx 視界で動く
 - 未 Commit の Close → Rollback（再 Open で欠落）
 
 #### テスト: 異常系
 - Commit 後の Tx 再利用 → エラー（`ErrTxDone`）
 - ネスト Begin → エラー（`ErrNestedTx`）
 - Tx 上の欠落 GET/DELETE → `ErrNotFound`、EXISTS → false
-- `ErrInvalidKey` / `ErrInvalidValue` / context キャンセル
+- `ErrInvalidKey` / `ErrInvalidValue` / context キャンセル（Scan の不正 prefix 含む）
 - Store Close 後の BeginTx → `ErrClosed`（Store 契約テスト）
 
 ### 並行スモーク

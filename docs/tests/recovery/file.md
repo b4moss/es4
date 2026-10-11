@@ -74,6 +74,22 @@ Recovery Storage（File / libSQL / Object）と起動時復元のテスト仕様
 - `restore_on_startup=false` なら既存 Recovery を読まない
 - OpenWith Recovery 注入が優先
 
+### 旧 `/` 階層キー（v0.10.0 破壊的・決定 D）
+
+スナップショット／永続に **旧 `/` 階層キー**（例: `a/b/c` を旧規則の階層として保存したもの）が混在しうる。  
+**決定 D:** Restore／Load 時に該当レコードは **削除**（読み込みスキップして State に載せない）。Open 自体は成功させる。  
+ユーザー向け: README／短い Migration で「旧キーは捨てて再投入。Recovery 内の旧キーは削除される」と **強く注意喚起**（文書は PO。tests は削除セマンティクスを固定）。
+
+#### テスト：正常系
+- 新規則キー（`a:b:c`）のみの Snapshot → 再 Open でそのまま復元される
+- 旧階層キーのみを含む Snapshot を Restore → Open 成功・当該キーは **Exists false**（削除済み）
+- 新旧混在 Snapshot → 新規則キーだけ残り、旧階層キーは消える
+
+#### テスト: 異常系
+- 旧キー削除後も合法キーの CRUD は通常どおり動く（副作用で State 全体を壊さない）
+- 削除対象以外（値バイト列の破損等）は既存どおり空 State 相当で続行
+-（文書観点・任意）Release／README の BREAKING 注意が「削除＋再投入」を述べていることをレビューで確認
+
 ----
 
 以上
