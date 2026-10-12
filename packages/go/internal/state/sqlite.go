@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite"
@@ -195,6 +196,45 @@ func (s *SQLite) Clear(ctx context.Context) error {
 		return fmt.Errorf("state: sqlite clear: %w", err)
 	}
 	return nil
+}
+
+func (s *SQLite) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, ErrClosed
+	}
+	s.waitNoActiveTxLocked()
+	if s.closed {
+		return nil, ErrClosed
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT key FROM kv`)
+	if err != nil {
+		return nil, fmt.Errorf("state: sqlite scan: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]string, 0)
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, fmt.Errorf("state: sqlite scan row: %w", err)
+		}
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, k)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("state: sqlite scan rows: %w", err)
+	}
+	return out, nil
 }
 
 func (s *SQLite) Export(ctx context.Context) (map[string]json.RawMessage, error) {
@@ -425,6 +465,32 @@ func (t *sqliteTx) Clear(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+func (t *sqliteTx) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+	var out []string
+	err := t.withLock(ctx, func() error {
+		rows, err := t.tx.QueryContext(ctx, `SELECT key FROM kv`)
+		if err != nil {
+			return fmt.Errorf("state: sqlite tx scan: %w", err)
+		}
+		defer rows.Close()
+		out = make([]string, 0)
+		for rows.Next() {
+			var k string
+			if err := rows.Scan(&k); err != nil {
+				return fmt.Errorf("state: sqlite tx scan row: %w", err)
+			}
+			if strings.HasPrefix(k, prefix) {
+				out = append(out, k)
+			}
+		}
+		return rows.Err()
+	})
+	return out, err
 }
 
 func (t *sqliteTx) Commit() error {

@@ -107,13 +107,13 @@ func TestState_CRUD_Clear(t *testing.T) {
 	s, _ := newReadyServer(t)
 	h := s.Handler()
 
-	put := doReq(t, h, http.MethodPut, "/v1/keys/a/b", []byte(`{"x":1}`))
+	put := doReq(t, h, http.MethodPut, "/v1/keys/a:b", []byte(`{"x":1}`))
 	put.Body.Close()
 	if put.StatusCode != http.StatusOK {
 		t.Fatalf("PUT status=%d", put.StatusCode)
 	}
 
-	get := doReq(t, h, http.MethodGet, "/v1/keys/a/b", nil)
+	get := doReq(t, h, http.MethodGet, "/v1/keys/a:b", nil)
 	body, _ := io.ReadAll(get.Body)
 	get.Body.Close()
 	if get.StatusCode != http.StatusOK {
@@ -123,7 +123,7 @@ func TestState_CRUD_Clear(t *testing.T) {
 		t.Fatalf("GET body=%s", body)
 	}
 
-	head := doReq(t, h, http.MethodHead, "/v1/keys/a/b", nil)
+	head := doReq(t, h, http.MethodHead, "/v1/keys/a:b", nil)
 	hb, _ := io.ReadAll(head.Body)
 	head.Body.Close()
 	if head.StatusCode != http.StatusOK {
@@ -133,13 +133,13 @@ func TestState_CRUD_Clear(t *testing.T) {
 		t.Fatalf("HEAD body should be empty, got %q", hb)
 	}
 
-	del := doReq(t, h, http.MethodDelete, "/v1/keys/a/b", nil)
+	del := doReq(t, h, http.MethodDelete, "/v1/keys/a:b", nil)
 	del.Body.Close()
 	if del.StatusCode != http.StatusOK {
 		t.Fatalf("DELETE status=%d", del.StatusCode)
 	}
 
-	get2 := doReq(t, h, http.MethodGet, "/v1/keys/a/b", nil)
+	get2 := doReq(t, h, http.MethodGet, "/v1/keys/a:b", nil)
 	if get2.StatusCode != http.StatusNotFound {
 		t.Fatalf("GET missing status=%d", get2.StatusCode)
 	}
@@ -147,7 +147,7 @@ func TestState_CRUD_Clear(t *testing.T) {
 		t.Fatalf("code=%s", code)
 	}
 
-	head2 := doReq(t, h, http.MethodHead, "/v1/keys/a/b", nil)
+	head2 := doReq(t, h, http.MethodHead, "/v1/keys/a:b", nil)
 	head2.Body.Close()
 	if head2.StatusCode != http.StatusNotFound {
 		t.Fatalf("HEAD missing status=%d", head2.StatusCode)
@@ -196,7 +196,7 @@ func TestState_Errors(t *testing.T) {
 		t.Fatalf("DELETE missing")
 	}
 
-	for _, path := range []string{"/v1/keys", "/v1/keys/", "/v1/keys/a/"} {
+	for _, path := range []string{"/v1/keys"} {
 		resp := doReq(t, h, http.MethodGet, path, nil)
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("%s status=%d want 400", path, resp.StatusCode)
@@ -204,6 +204,22 @@ func TestState_Errors(t *testing.T) {
 		if code := readErrCode(t, resp); code != CodeInvalidKey {
 			t.Fatalf("%s code=%s", path, code)
 		}
+	}
+	// Trailing slash / multi-segment old hierarchy paths are not registered → 404.
+	for _, path := range []string{"/v1/keys/", "/v1/keys/a/", "/v1/keys/a/b"} {
+		resp := doReq(t, h, http.MethodGet, path, nil)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s status=%d want 404", path, resp.StatusCode)
+		}
+	}
+	// Colon hierarchy in a single segment works.
+	putColon := doReq(t, h, http.MethodPut, "/v1/keys/a:b:c", []byte(`{"n":3}`))
+	if putColon.StatusCode != http.StatusOK {
+		t.Fatalf("PUT a:b:c status=%d", putColon.StatusCode)
+	}
+	getColon := doReq(t, h, http.MethodGet, "/v1/keys/a:b:c", nil)
+	if getColon.StatusCode != http.StatusOK {
+		t.Fatalf("GET a:b:c status=%d", getColon.StatusCode)
 	}
 
 	bad := doReq(t, h, http.MethodPut, "/v1/keys/a", []byte(`{not-json`))

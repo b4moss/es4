@@ -67,7 +67,7 @@ func TestRedis_CloseReopenPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	val := json.RawMessage(`{"n":7}`)
-	if err := st1.Set(ctx, "users/1", val); err != nil {
+	if err := st1.Set(ctx, "users:1", val); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := st1.BeginTx(ctx)
@@ -89,9 +89,9 @@ func TestRedis_CloseReopenPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st2.Close() })
-	got, err := st2.Get(ctx, "users/1")
+	got, err := st2.Get(ctx, "users:1")
 	if err != nil || string(got) != string(val) {
-		t.Fatalf("persist users/1: %s err=%v", got, err)
+		t.Fatalf("persist users:1: %s err=%v", got, err)
 	}
 	got, err = st2.Get(ctx, "tx/k")
 	if err != nil || string(got) != `1` {

@@ -120,9 +120,13 @@ func validateFirestoreCollectionID(id string) error {
 }
 
 // EncodeFirestoreDocID path-percent-encodes a logical key for use as a document ID.
-// "/" becomes "%2F". Callers must ValidateKey first.
+// Hierarchical `:` becomes "%3A"; `/` (ordinary character) becomes "%2F".
+// Callers must ValidateKey first.
+//
+// Note: url.PathEscape leaves `:` unescaped (allowed in path segments), so we
+// additionally encode `:` → `%3A` for Go/Node parity with encodeURIComponent.
 func EncodeFirestoreDocID(logicalKey string) (string, error) {
-	id := url.PathEscape(logicalKey)
+	id := strings.ReplaceAll(url.PathEscape(logicalKey), ":", "%3A")
 	if len(id) > firestoreMaxDocIDBytes {
 		return "", fmt.Errorf("%w: %d bytes (max %d)", ErrFirestoreDocIDTooLong, len(id), firestoreMaxDocIDBytes)
 	}
@@ -311,6 +315,46 @@ func (f *Firestore) Clear(ctx context.Context) error {
 		return ErrClosed
 	}
 	return f.clearCollectionLocked(ctx)
+}
+
+func (f *Firestore) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed {
+		return nil, ErrClosed
+	}
+	f.waitNoActiveTxLocked()
+	if f.closed {
+		return nil, ErrClosed
+	}
+
+	out := make([]string, 0)
+	iter := f.coll().Documents(ctx)
+	defer iter.Stop()
+	for {
+		snap, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("state: firestore scan: %w", err)
+		}
+		logical, err := DecodeFirestoreDocID(snap.Ref.ID)
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(logical, prefix) {
+			out = append(out, logical)
+		}
+	}
+	return out, nil
 }
 
 func (f *Firestore) clearCollectionLocked(ctx context.Context) error {
@@ -612,6 +656,52 @@ func (t *firestoreTx) Clear(ctx context.Context) error {
 		t.overlay = make(map[string]overlayEntry)
 		return nil
 	})
+}
+
+func (t *firestoreTx) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+	var out []string
+	err := t.withLock(ctx, func() error {
+		seen := make(map[string]struct{})
+		if !t.cleared {
+			iter := t.f.coll().Documents(ctx)
+			defer iter.Stop()
+			for {
+				snap, err := iter.Next()
+				if err == iterator.Done {
+					break
+				}
+				if err != nil {
+					return fmt.Errorf("state: firestore tx scan: %w", err)
+				}
+				logical, err := DecodeFirestoreDocID(snap.Ref.ID)
+				if err != nil {
+					return err
+				}
+				if !strings.HasPrefix(logical, prefix) {
+					continue
+				}
+				if e, ok := t.overlay[logical]; ok && e.deleted {
+					continue
+				}
+				seen[logical] = struct{}{}
+			}
+		}
+		for k, e := range t.overlay {
+			if e.deleted || !strings.HasPrefix(k, prefix) {
+				continue
+			}
+			seen[k] = struct{}{}
+		}
+		out = make([]string, 0, len(seen))
+		for k := range seen {
+			out = append(out, k)
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (t *firestoreTx) Commit() error {

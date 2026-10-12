@@ -52,28 +52,28 @@ func TestFirestoreContract_CRUD(t *testing.T) {
 	ctx := context.Background()
 	val := json.RawMessage(`{"n":1}`)
 
-	if err := st.Set(ctx, "a/b", val); err != nil {
+	if err := st.Set(ctx, "a:b", val); err != nil {
 		t.Fatal(err)
 	}
-	got, err := st.Get(ctx, "a/b")
+	got, err := st.Get(ctx, "a:b")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(val) {
 		t.Fatalf("get: got %s want %s", got, val)
 	}
-	ok, err := st.Exists(ctx, "a/b")
+	ok, err := st.Exists(ctx, "a:b")
 	if err != nil || !ok {
 		t.Fatalf("exists: ok=%v err=%v", ok, err)
 	}
-	if err := st.Delete(ctx, "a/b"); err != nil {
+	if err := st.Delete(ctx, "a:b"); err != nil {
 		t.Fatal(err)
 	}
-	ok, err = st.Exists(ctx, "a/b")
+	ok, err = st.Exists(ctx, "a:b")
 	if err != nil || ok {
 		t.Fatalf("exists after delete: ok=%v err=%v", ok, err)
 	}
-	_, err = st.Get(ctx, "a/b")
+	_, err = st.Get(ctx, "a:b")
 	if !errors.Is(err, state.ErrNotFound) {
 		t.Fatalf("get after delete: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestFirestoreContract_JSONKinds(t *testing.T) {
 func TestFirestoreContract_InvalidKeyValue(t *testing.T) {
 	st := openFirestoreStore(t, "inv_"+uuid.NewString())
 	ctx := context.Background()
-	for _, key := range []string{"", "/a", "a/", "a//b"} {
+	for _, key := range []string{"", ":a", "a:", "a::b"} {
 		err := st.Set(ctx, key, json.RawMessage(`1`))
 		if !errors.Is(err, state.ErrInvalidKey) {
 			t.Fatalf("Set(%q): got %v want ErrInvalidKey", key, err)
@@ -135,7 +135,7 @@ func TestFirestoreContract_ExportReplaceTx(t *testing.T) {
 	_ = st.Set(ctx, "old", json.RawMessage(`0`))
 	entries := map[string]json.RawMessage{
 		"new":  json.RawMessage(`{"a":1}`),
-		"a/b":  json.RawMessage(`true`),
+		"a:b":  json.RawMessage(`true`),
 	}
 	if err := st.Replace(ctx, entries); err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestFirestoreContract_ExportReplaceTx(t *testing.T) {
 	if _, ok := exp["old"]; ok {
 		t.Fatal("old should be gone")
 	}
-	if _, ok := exp["a/b"]; !ok {
+	if _, ok := exp["a:b"]; !ok {
 		t.Fatal("export keys must be logical (K-N5)")
 	}
 
@@ -343,7 +343,7 @@ func TestFirestoreContract_CanceledContext(t *testing.T) {
 func TestFirestoreContract_ExportRoundTripToMemory(t *testing.T) {
 	st := openFirestoreStore(t, "rt_"+uuid.NewString())
 	ctx := context.Background()
-	_ = st.Set(ctx, "a/b", json.RawMessage(`{"x":1}`))
+	_ = st.Set(ctx, "a:b", json.RawMessage(`{"x":1}`))
 	exp, err := st.Export(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -353,7 +353,7 @@ func TestFirestoreContract_ExportRoundTripToMemory(t *testing.T) {
 	if err := mem.Replace(ctx, exp); err != nil {
 		t.Fatal(err)
 	}
-	got, err := mem.Get(ctx, "a/b")
+	got, err := mem.Get(ctx, "a:b")
 	if err != nil || string(got) != `{"x":1}` {
 		t.Fatalf("got %s err=%v", got, err)
 	}

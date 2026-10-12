@@ -18,7 +18,7 @@ func TestEnvelope_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 	st := state.NewMemory()
 	t.Cleanup(func() { _ = st.Close() })
-	_ = st.Set(ctx, "a/b", json.RawMessage(`{"x":true}`))
+	_ = st.Set(ctx, "a:b", json.RawMessage(`{"x":true}`))
 
 	path := filepath.Join(t.TempDir(), "rp.json")
 	rec := recovery.NewFile(path)
@@ -49,7 +49,7 @@ func TestEnvelope_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(payload.Entries["a/b"]) != `{"x":true}` {
+	if string(payload.Entries["a:b"]) != `{"x":true}` {
 		t.Fatalf("payload: %#v", payload.Entries)
 	}
 }
@@ -158,6 +158,45 @@ func TestRestoreInto(t *testing.T) {
 	got, err := dst.Get(ctx, "a")
 	if err != nil || string(got) != `"hi"` {
 		t.Fatalf("got %s err=%v", got, err)
+	}
+}
+
+func TestRestoreInto_DropsLegacySlashHierarchyKeys(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	// Craft a snapshot envelope with mixed new colon keys and legacy slash keys.
+	payload, err := json.Marshal(snapshot.MemoryPayload{Entries: map[string]json.RawMessage{
+		"a:b:c": json.RawMessage(`{"new":true}`),
+		"a/b/c": json.RawMessage(`{"old":true}`),
+		"keep":  json.RawMessage(`1`),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := json.Marshal(snapshot.Envelope{
+		Version:   snapshot.CurrentVersion,
+		CreatedAt: time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC),
+		Payload:   payload,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := state.NewMemory()
+	t.Cleanup(func() { _ = dst.Close() })
+	if err := snapshot.RestoreInto(ctx, dst, env); err != nil {
+		t.Fatal(err)
+	}
+	got, err := dst.Get(ctx, "a:b:c")
+	if err != nil || string(got) != `{"new":true}` {
+		t.Fatalf("new key: %s err=%v", got, err)
+	}
+	ok, err := dst.Exists(ctx, "a/b/c")
+	if err != nil || ok {
+		t.Fatalf("legacy slash key should be dropped: ok=%v err=%v", ok, err)
+	}
+	got, err = dst.Get(ctx, "keep")
+	if err != nil || string(got) != `1` {
+		t.Fatalf("keep: %s err=%v", got, err)
 	}
 }
 

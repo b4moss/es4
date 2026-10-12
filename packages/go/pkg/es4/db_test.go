@@ -27,17 +27,17 @@ func TestDB_StateAPI(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	val := json.RawMessage(`{"hello":"world"}`)
-	if err := db.Set(ctx, "users/1", val); err != nil {
+	if err := db.Set(ctx, "users:1", val); err != nil {
 		t.Fatal(err)
 	}
-	got, err := db.Get(ctx, "users/1")
+	got, err := db.Get(ctx, "users:1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(val) {
 		t.Fatalf("got %s", got)
 	}
-	ok, err := db.Exists(ctx, "users/1")
+	ok, err := db.Exists(ctx, "users:1")
 	if err != nil || !ok {
 		t.Fatalf("exists: %v %v", ok, err)
 	}
@@ -53,7 +53,7 @@ func TestDB_StateAPI(t *testing.T) {
 	if !errors.Is(err, es4.ErrNotFound) {
 		t.Fatalf("delete missing: %v", err)
 	}
-	if err := db.Delete(ctx, "users/1"); err != nil {
+	if err := db.Delete(ctx, "users:1"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Clear(ctx); err != nil {
@@ -70,7 +70,7 @@ func TestDB_InvalidKeys(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	for _, key := range []string{"", "/a", "a/", "a//b"} {
+	for _, key := range []string{"", ":a", "a:", "a::b"} {
 		err := db.Set(ctx, key, json.RawMessage(`1`))
 		if !errors.Is(err, es4.ErrInvalidKey) {
 			t.Fatalf("key %q: got %v", key, err)
@@ -97,7 +97,7 @@ func TestDB_RestoreOnStartup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db1.Set(ctx, "a/b", json.RawMessage(`{"n":42}`)); err != nil {
+	if err := db1.Set(ctx, "a:b", json.RawMessage(`{"n":42}`)); err != nil {
 		t.Fatal(err)
 	}
 	if err := db1.SnapshotNow(ctx); err != nil {
@@ -115,7 +115,7 @@ func TestDB_RestoreOnStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db2.Close() })
-	got, err := db2.Get(ctx, "a/b")
+	got, err := db2.Get(ctx, "a:b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -648,7 +648,7 @@ func TestSnapshot_SQLite_EntriesEnvelope_NotDBCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	_ = db.Set(ctx, "users/1", json.RawMessage(`{"n":7}`))
+	_ = db.Set(ctx, "users:1", json.RawMessage(`{"n":7}`))
 	if err := db.SnapshotNow(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -683,7 +683,7 @@ func TestSnapshot_SQLite_EntriesEnvelope_NotDBCopy(t *testing.T) {
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if string(payload.Entries["users/1"]) != `{"n":7}` {
+	if string(payload.Entries["users:1"]) != `{"n":7}` {
 		t.Fatalf("entries: %#v", payload.Entries)
 	}
 }

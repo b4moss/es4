@@ -33,13 +33,13 @@ describe.skipIf(!want("memory"))("e2e.node.memory — C2/C4/C5", () => {
       disableRestore: true,
     });
     await db.set("plain", `"p"`);
-    await db.set("a/b/c", `{"h":1}`);
+    await db.set("a:b:c", `{"h":1}`);
     await db.set("x/y", `42`);
     const tx = await db.beginTx();
     await tx.set("txk", `"committed"`);
     await tx.commit();
     expect(await db.get("plain")).toBe(`"p"`);
-    expect(await db.get("a/b/c")).toBe(`{"h":1}`);
+    expect(await db.get("a:b:c")).toBe(`{"h":1}`);
     expect(await db.get("x/y")).toBe(`42`);
     expect(await db.get("txk")).toBe(`"committed"`);
     await db.close();
@@ -117,13 +117,13 @@ describe.skipIf(!want("file"))("e2e.node.file — File SQLite C1–C5", () => {
     const f = await fixture();
     const db1 = await openWith({ options: f.opts, skipAsyncRestore: true });
     await db1.set("plain", `"p"`);
-    await db1.set("a/b/c", `{"h":1}`);
+    await db1.set("a:b:c", `{"h":1}`);
     await db1.snapshotNow();
     await db1.close();
     rmSync(f.statePath, { force: true });
     const db2 = await openWith({ options: f.opts, skipAsyncRestore: true });
     expect(await db2.get("plain")).toBe(`"p"`);
-    expect(await db2.get("a/b/c")).toBe(`{"h":1}`);
+    expect(await db2.get("a:b:c")).toBe(`{"h":1}`);
     await db2.close();
     f.clear();
     rmSync(f.dir, { recursive: true, force: true });
@@ -199,12 +199,12 @@ describe.skipIf(!want("libsql"))("e2e.node.libsql — File C1–C5 + Memory C2/C
       snapshot_interval: 0,
     };
     const db1 = await openWith({ options: opts, skipAsyncRestore: true });
-    await db1.set("a/b", `1`);
+    await db1.set("a:b", `1`);
     await db1.set("c", `"x"`);
     await db1.snapshotNow();
     await db1.close();
     const db2 = await openWith({ options: opts, skipAsyncRestore: true });
-    expect(await db2.get("a/b")).toBe(`1`);
+    expect(await db2.get("a:b")).toBe(`1`);
     expect(await db2.get("c")).toBe(`"x"`);
     await db2.close();
     rmSync(dir, { recursive: true, force: true });
@@ -268,9 +268,9 @@ describe.skipIf(!want("libsql"))("e2e.node.libsql — File C1–C5 + Memory C2/C
       disableRestore: true,
       skipAsyncRestore: true,
     });
-    await db.set("a/b", `1`);
+    await db.set("a:b", `1`);
     await db.snapshotNow();
-    expect(await db.get("a/b")).toBe(`1`);
+    expect(await db.get("a:b")).toBe(`1`);
     await db.clear();
     await db.clear();
     await db.close();
@@ -326,11 +326,11 @@ describe.skipIf(!want("object"))("e2e.node.object — Object Recovery §5.1–§
     expect(await db2.get("hello")).toBe(`{"obj":1}`);
 
     // C2
-    await db2.set("a/b/c", `{"h":1}`);
+    await db2.set("a:b:c", `{"h":1}`);
     await db2.snapshotNow();
     await db2.close();
     const db3 = await openWith({ options: opts, skipAsyncRestore: true });
-    expect(await db3.get("a/b/c")).toBe(`{"h":1}`);
+    expect(await db3.get("a:b:c")).toBe(`{"h":1}`);
 
     // C3
     await db3.set("unsaved", `9`);
@@ -387,14 +387,14 @@ describe.skipIf(!want("redis"))("e2e.node.redis — Redis State C1–C5", () => 
     expect(await db2.get("hello")).toBe(`{"redis":1}`);
 
     // C2
-    await db2.set("a/b/c", `{"h":1}`);
+    await db2.set("a:b:c", `{"h":1}`);
     await db2.set("x/y", `42`);
     const tx = await db2.beginTx();
     await tx.set("txk", `"ok"`);
     await tx.commit();
     await db2.close();
     const db3 = await open();
-    expect(await db3.get("a/b/c")).toBe(`{"h":1}`);
+    expect(await db3.get("a:b:c")).toBe(`{"h":1}`);
     expect(await db3.get("txk")).toBe(`"ok"`);
 
     // C3 rollback not restored
@@ -440,10 +440,10 @@ describe.skipIf(!want("valkey"))("e2e.node.valkey — Valkey State C1–C5", () 
     await db1.close();
     const db2 = await open();
     expect(await db2.get("hello")).toBe(`{"valkey":1}`);
-    await db2.set("a/b/c", `1`);
+    await db2.set("a:b:c", `1`);
     await db2.close();
     const db3 = await open();
-    expect(await db3.get("a/b/c")).toBe(`1`);
+    expect(await db3.get("a:b:c")).toBe(`1`);
     const tx = await db3.beginTx();
     await tx.set("r", `1`);
     await tx.rollback();

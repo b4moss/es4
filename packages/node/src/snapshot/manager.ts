@@ -1,5 +1,5 @@
 import type { RecoveryStore } from "../recovery/types.js";
-import type { JsonRaw, Store } from "../state/types.js";
+import { validateKey, type JsonRaw, type Store } from "../state/types.js";
 
 export const CURRENT_VERSION = 1;
 
@@ -113,5 +113,25 @@ export async function restoreInto(
   signal?: AbortSignal,
 ): Promise<void> {
   const env = decodeEnvelope(data);
-  await state.replace(env.payload.entries, signal);
+  await state.replace(filterRestoreEntries(env.payload.entries), signal);
+}
+
+/**
+ * Decision D (v0.10.0): drop legacy `/`-hierarchy keys and invalid keys
+ * before Replace on Recovery restore.
+ */
+export function filterRestoreEntries(
+  entries: Record<string, JsonRaw>,
+): Record<string, JsonRaw> {
+  const out: Record<string, JsonRaw> = {};
+  for (const [k, v] of Object.entries(entries)) {
+    if (k.includes("/")) continue;
+    try {
+      validateKey(k);
+    } catch {
+      continue;
+    }
+    out[k] = v;
+  }
+  return out;
 }

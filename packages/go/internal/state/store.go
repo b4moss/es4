@@ -41,6 +41,9 @@ type Store interface {
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
+	// Scan returns all logical keys with the given string prefix in one shot
+	// (no paging). Empty prefix lists every key. Order is unspecified.
+	Scan(ctx context.Context, prefix string) ([]string, error)
 	// Export returns a deep copy of all entries (for Snapshot payload).
 	// The returned map and each RawMessage are independent of Store storage.
 	Export(ctx context.Context) (map[string]json.RawMessage, error)
@@ -67,22 +70,47 @@ func NewMemory() *Memory {
 	return &Memory{entries: make(map[string]json.RawMessage)}
 }
 
-// ValidateKey checks hierarchical key rules (`/` separator).
-// Rejects empty, leading `/`, trailing `/`, and consecutive `//`.
+// ValidateKey checks hierarchical key rules (`:` separator).
+// Rejects empty, leading `:`, trailing `:`, and consecutive `::`.
+// `/` is allowed as an ordinary character (no hierarchy meaning).
 func ValidateKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("%w: empty", ErrInvalidKey)
 	}
-	if strings.HasPrefix(key, "/") {
-		return fmt.Errorf("%w: leading slash", ErrInvalidKey)
+	if strings.HasPrefix(key, ":") {
+		return fmt.Errorf("%w: leading colon", ErrInvalidKey)
 	}
-	if strings.HasSuffix(key, "/") {
-		return fmt.Errorf("%w: trailing slash", ErrInvalidKey)
+	if strings.HasSuffix(key, ":") {
+		return fmt.Errorf("%w: trailing colon", ErrInvalidKey)
 	}
-	if strings.Contains(key, "//") {
-		return fmt.Errorf("%w: consecutive slashes", ErrInvalidKey)
+	if strings.Contains(key, "::") {
+		return fmt.Errorf("%w: consecutive colons", ErrInvalidKey)
 	}
 	return nil
+}
+
+// ValidateScanPrefix validates a Scan prefix. Empty prefix means "all keys".
+func ValidateScanPrefix(prefix string) error {
+	if prefix == "" {
+		return nil
+	}
+	return ValidateKey(prefix)
+}
+
+// KeysWithPrefix filters keys that have the given string prefix.
+func KeysWithPrefix(keys []string, prefix string) []string {
+	if prefix == "" {
+		out := make([]string, len(keys))
+		copy(out, keys)
+		return out
+	}
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // ValidateValue ensures value is valid JSON (any document).
@@ -186,6 +214,28 @@ func (m *Memory) Clear(ctx context.Context) error {
 	}
 	m.entries = make(map[string]json.RawMessage)
 	return nil
+}
+
+func (m *Memory) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, ErrClosed
+	}
+	out := make([]string, 0, len(m.entries))
+	for k := range m.entries {
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, k)
+		}
+	}
+	return out, nil
 }
 
 func (m *Memory) Export(ctx context.Context) (map[string]json.RawMessage, error) {
@@ -378,6 +428,39 @@ func (t *memoryTx) Clear(ctx context.Context) error {
 		t.overlay = make(map[string]overlayEntry)
 		return nil
 	})
+}
+
+func (t *memoryTx) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+	var out []string
+	err := t.withLock(ctx, func() error {
+		seen := make(map[string]struct{})
+		if !t.cleared {
+			for k := range t.m.entries {
+				if !strings.HasPrefix(k, prefix) {
+					continue
+				}
+				if e, ok := t.overlay[k]; ok && e.deleted {
+					continue
+				}
+				seen[k] = struct{}{}
+			}
+		}
+		for k, e := range t.overlay {
+			if e.deleted || !strings.HasPrefix(k, prefix) {
+				continue
+			}
+			seen[k] = struct{}{}
+		}
+		out = make([]string, 0, len(seen))
+		for k := range seen {
+			out = append(out, k)
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (t *memoryTx) Commit() error {
