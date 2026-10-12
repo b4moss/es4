@@ -1,7 +1,7 @@
-# v0.9.0 Node port — completion notes (draft)
+# v0.9.0 Node port — completion notes
 
-実装: `packages/node`（`@b4moss/es4` **v0.9.0**）  
-正本契約: Go tag `v0.8.0`
+実装: `packages/node`（`@b4moss/es4` **v0.9.0**・タグ／npm 公開済み）  
+正本契約: Go tag `v0.8.0`（後続 v0.10.0 でキー `:` ＋ Scan に更新）
 
 ## Included
 

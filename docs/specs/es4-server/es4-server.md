@@ -45,13 +45,14 @@ Cloud Run 向け: **公開パスに末尾 `/` を付けない**。末尾 `/` 付
 
 | メソッド | パス | 写像 | 成功 |
 |----------|------|------|------|
-| `PUT` | `/v1/keys/{key…}` | SET（body＝JSON） | **200** |
-| `GET` | `/v1/keys/{key…}` | GET | **200**＋JSON |
-| `DELETE` | `/v1/keys/{key…}` | DELETE | **200** |
-| `HEAD` | `/v1/keys/{key…}` | EXISTS | あり **200**／なし **404**（本文なし） |
+| `PUT` | `/v1/keys/{key}` | SET（body＝JSON） | **200** |
+| `GET` | `/v1/keys/{key}` | GET | **200**＋JSON |
+| `DELETE` | `/v1/keys/{key}` | DELETE | **200** |
+| `HEAD` | `/v1/keys/{key}` | EXISTS | あり **200**／なし **404**（本文なし） |
 | `POST` | `/v1/clear` | CLEAR | **200** |
 
-- キーはパス階層そのもの（例: `/v1/keys/a/b` → `a/b`）
+- **キー写像（v0.10.0・決定 A）:** 論理キーは URL パス **1 段**（例: 論理 `a:b:c` → `/v1/keys/a:b:c`）
+- 旧複数パス段（例: `/v1/keys/a/b`）はサポートしない → **404**（または **400** `invalid_key`）
 - 空キー相当 `/v1/keys`・`/v1/keys/` → **400** `invalid_key`
 - 欠落 GET／DELETE → **404** `not_found`
 - 不正 JSON PUT → **400** `invalid_value`
@@ -62,7 +63,7 @@ Cloud Run 向け: **公開パスに末尾 `/` を付けない**。末尾 `/` 付
 | メソッド | パス | 写像 | 成功 |
 |----------|------|------|------|
 | `POST` | `/v1/tx` | BeginTx | **200** `{"id":"…"}` |
-| `PUT`/`GET`/`DELETE`/`HEAD` | `/v1/tx/{id}/keys/{key…}` | Tx 上の State | State と同様 |
+| `PUT`/`GET`/`DELETE`/`HEAD` | `/v1/tx/{id}/keys/{key}` | Tx 上の State | State と同様 |
 | `POST` | `/v1/tx/{id}/clear` | Tx CLEAR | **200** |
 | `POST` | `/v1/tx/{id}/commit` | Commit | **200** |
 | `POST` | `/v1/tx/{id}/rollback` | Rollback | **200** |
@@ -96,7 +97,7 @@ docker build -f docker/Dockerfile .
 
 ## 範囲外
 
-認証・認可、gRPC／WebSocket、LIST／scan、公開 Snapshot API、マルチレプリカ共有 State。Redis／Valkey 等の追加 State Backend は Phase 5 でも **Unscheduled**（[`docs/specs/state/`](../state/)）。
+認証・認可、gRPC／WebSocket、公開 Snapshot API、マルチレプリカ共有 State。ライブラリ面の `Scan` は v0.10.0 で追加済み（HTTP LIST エンドポイントは当面なし）。
 
 ## 関連
 

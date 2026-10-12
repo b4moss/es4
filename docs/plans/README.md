@@ -18,8 +18,8 @@
 | `v0.7.2`（暫定） | Phase 6 追補 — GitHub Actions スイート | **実装完了**（CI／CodeQL／Scorecard／release／publish-go／docker。Git タグは未打） | [完了注記](./v0.7.2/github-actions.md) · [CI.md](../../.github/CI.md) |
 | `v0.7.3`（暫定） | Phase 6 追補 — E2E libSQL Recovery | **実装完了**（File／InMemory・docs・`e2e.yml` layer=libsql。Git タグは未打） | [tests/e2e](../tests/e2e/) · [完了注記](./v0.7.3/e2e-libsql.md) |
 | `v0.8.0`（暫定） | Phase 7 — 外部サービスの充実（State Backend） | **実装完了**（Git タグ `v0.8.0`） | [redis-valkey-state.md](./v0.8.0/redis-valkey-state.md) · [firestore-state.md](./v0.8.0/firestore-state.md) · [specs/state](../specs/state/) · [tests/e2e](../tests/e2e/) |
-| `v0.9.0`（暫定） | Phase 8 — Node.js／TypeScript ポート | **実装中**（draft） | [plan.md](./v0.9.0/plan.md) · [test-spec-node.md](./v0.9.0/test-spec-node.md) |
-| `v0.10.0`（暫定） | Phase 9 — キーデリミタ `:` 化（＋推奨 Scan） | **plans 転記済み**（未着手） | [key-delimiter.md](./v0.10.0/key-delimiter.md) · [README](./v0.10.0/README.md) |
+| `v0.9.0`（暫定） | Phase 8 — Node.js／TypeScript ポート | **実装完了**（タグ + npm） | [plan.md](./v0.9.0/plan.md) · [NOTES](./v0.9.0/NOTES.md) · [specs](../specs/) |
+| `v0.10.0`（暫定） | Phase 9 — キーデリミタ `:` 化（＋ Scan） | **実装完了 → specs**（タグ + npm） | [key-delimiter.md](./v0.10.0/key-delimiter.md) · [specs/state](../specs/state/) · [specs/es4-server](../specs/es4-server/) |
 | （横断） | 未決論点 | 残件なし | [open-questions.md](./open-questions.md) |
 
 SemVer が正式決定されるまで版号は provisional。フォルダ名・roadmap 表と同時に改名する。`v0.7.0`–`v0.7.3` の Git タグは本索引の対象外（マージ後にコーディネータが打つ）。`v0.8.0` タグも本 PR では打たない。

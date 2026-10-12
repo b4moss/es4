@@ -1,6 +1,6 @@
 # @b4moss/es4 (Node.js / TypeScript)
 
-TypeScript port of Es4 Go **v0.8.0** contracts. Options keys stay **snake_case** (`state_path`, `ES4_*` env). Snapshot／Recovery remain internal.
+TypeScript port of Es4 Go **v0.10.0** contracts (key delimiter `:` + `Scan(prefix)`). Options keys stay **snake_case** (`state_path`, `ES4_*` env). Snapshot／Recovery remain internal. Package: **`@b4moss/es4@0.10.0`**.
 
 ## Requirements
 
@@ -28,8 +28,9 @@ npm ci
 import { open, defaults } from "@b4moss/es4";
 
 const db = await open({ ...defaults(), memory_only: true });
-await db.set("hello", JSON.stringify({ n: 1 }));
-console.log(await db.get("hello"));
+await db.set("app:hello", JSON.stringify({ n: 1 }));
+console.log(await db.get("app:hello"));
+console.log(await db.scan("app:"));
 await db.close();
 ```
 
@@ -62,5 +63,6 @@ Compose services: `docker compose -f docker/e2e/docker-compose.yml up -d …` (s
 
 ## Docs
 
-- Plan: [`docs/plans/v0.9.0/`](../../docs/plans/v0.9.0/)
+- Current line: [`docs/roadmap.md`](../../docs/roadmap.md)（v0.10.0）
 - Specs (language-neutral): [`docs/specs/`](../../docs/specs/)
+- v0.10.0 notes: [`docs/plans/v0.10.0/`](../../docs/plans/v0.10.0/)

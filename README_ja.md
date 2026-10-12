@@ -13,7 +13,7 @@
 
 プロダクト知識は **[`docs/`](./docs/)**（OKF）にあります。このルート README はインストールと使い方の**日本語入口**です（英語版が正本）。詳細な仕様と計画は `docs/` に置きます。
 
-現行モノレポのライン: **Git タグ `v0.8.0`**（Go ライブラリ）。Node.js／TypeScript 移植は **`packages/node`**（npm の `@b4moss/es4` **v0.9.0**）。
+現行モノレポのライン: **Git タグ `v0.10.0`**（Go `packages/go` と Node `@b4moss/es4` を揃えています）。**破壊的（対 v0.9.0）:** キー階層区切り `/` → `:` および `Scan(prefix)`。
 
 ## Purpose（目的）
 
@@ -24,24 +24,16 @@
 
 ## Scope（範囲）
 
-**対象内（Go で `v0.7.3` 時点に実装済み）:**
+**対象内（Go + Node・`v0.10.0`）:**
 
 | Layer | Choices |
 |-------|---------|
 | State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) · Firestore (`state_backend=firestore`) |
-| Recovery | `file` · `libsql` (local) · `object` (S3-compatible) |
-| Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` · Tx: `BeginTx` → Commit/Rollback |
-| Server | HTTP Es4 Server + Docker image workflows |
-| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore は **`layer=all` 非対象**） |
-
-**対象内（Node・`packages/node`・マイルストーン v0.9.0）:**
-
-| Layer | Choices |
-|-------|---------|
-| State | Memory · SQLite · Redis／Valkey · Firestore（Go と同 Options 語彙） |
 | Recovery | `file` · `libsql`（ローカル）· `object`（S3 互換）— 内部のみ |
-| Public API | `open` / `close` · State · Tx · HTTP Es4 Server |
-| E2E | Go と同 layer／カタログ ID（`npm run test:e2e:<layer>`） |
+| Keys | 階層区切り **`:`**（`/` は通常文字）。拒否: 空・先頭/末尾 `:`・連続 `::` |
+| Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` / `Scan(prefix)` · Tx: `BeginTx` → Commit/Rollback（Tx 上 Scan） |
+| Server | HTTP Es4 Server + Docker — キーはパス 1 段（`/v1/keys/a:b:c`） |
+| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis · Valkey · Firestore Emulator（`workflow_dispatch`; redis／valkey／firestore は **`layer=all` 非対象**） |
 
 **対象外／未実装:**
 
@@ -59,10 +51,10 @@
 github.com/b4moss/es4/packages/go
 ```
 
-ネストした Go モジュールタグ（`packages/go/vX.Y.Z`）はまだ公開していません（`packages/go/VERSION` はまだ `0.7.1`）。タグ `v0.7.3` のモノレポコミットをピンします:
+Go モジュールタグ: `packages/go/v0.10.0`（`packages/go/VERSION` 参照）。
 
 ```bash
-go get github.com/b4moss/es4/packages/go@b43247463bb76a8758829ad819f4070b9986e366
+go get github.com/b4moss/es4/packages/go@v0.10.0
 ```
 
 Import:

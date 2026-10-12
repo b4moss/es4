@@ -60,6 +60,10 @@ Snapshot 封筒を永続化し、再起動時に State へ戻す。公開 API �
 
 - Restore 完了前でも State API を受け付ける（起動をブロックして Ready を待たない）
 
+## Restore とキー規則（v0.10.0）
+
+- Restore 時、現行 `ValidateKey` に合わないエントリ（旧 `/` 階層キーや不正 `:` キー）は **捨てて** Replace する（決定 D）。自動マイグレーションはしない — 利用者は捨てて再投入する
+
 ## 関連
 
 - テスト仕様: [`docs/tests/recovery/`](../../tests/recovery/)

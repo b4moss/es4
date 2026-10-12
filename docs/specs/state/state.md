@@ -1,6 +1,6 @@
 # State 仕様
 
-現行バージョンに存在する公開 State API の正本（Phase 1 / SemVer `v0.2.0`、Phase 2 / SemVer `v0.3.0` で SQLite Backend 追加、Phase 5 / SemVer `v0.6.0` で Adapter 境界を正本化、v0.8.0 で Redis／Valkey および Firestore State Backend 追加）。
+現行バージョンに存在する公開 State API の正本（Phase 1–7 に加え、**v0.10.0** でキー区切り `:` 化と `Scan(prefix)` を追加。Go / Node パリティ）。
 
 ## 概要
 
@@ -16,14 +16,16 @@ JSON ドキュメントストア。公開面は State API と **別面の Tx API
 | `DELETE` | **エラー** | |
 | `EXISTS` | `false`（エラーなし） | |
 | `CLEAR` | — | 全消去。空でも成功。Firestore は **設定 collection 内のみ** |
+| `SCAN(prefix)` | — | prefix **前方一致**の論理キーを **一括** `[]string` で返す（ページングなし）。空 prefix＝全列挙。Tx 内可 |
 
 呼び出しは `context.Context` 付きの同期 API（非同期志向。同期前提のブロッキング設計にはしない）。
 
-## キー
+## キー（v0.10.0）
 
-- 区切り文字 `/` による階層文字列
-- **拒否:** 空、先頭 `/`、末尾 `/`、連続 `//`
-- Phase 2 でも scan / `LIST` は持たない
+- 区切り文字 **`:`** による階層文字列（Redis/Valkey スタイル）
+- **`/` は通常文字として許可**（階層意味なし）
+- **拒否:** 空、先頭 `:`、末尾 `:`、連続 `::`
+- Firestore Doc ID: パス・パーセントエンコードのうえ `:` → `%3A`（Go/Node パリティ）
 
 ## 値
 
@@ -40,7 +42,7 @@ State Adapter は差し替え可能。全 Backend が共有する内部契約は
 
 | 操作 | 契約 |
 |------|------|
-| `Set` / `Get` / `Delete` / `Exists` / `Clear` | 公開 State と同じキー／値規則 |
+| `Set` / `Get` / `Delete` / `Exists` / `Clear` / `Scan` | 公開 State と同じキー／値規則 |
 | `Export` | **deep copy**。返却 map や `json.RawMessage` を呼び出し側が改変しても Store に漏れない。Store 側の後続変更も、以前返した Export を自動では変えない。map キーは **論理キー** |
 | `Replace` | **原子的**。成功後は渡したエントリ集合のみが観測される（空 map は全消去＝Clear 相当）。並行読取はロック待ちしてよいが、旧＋新の混在を公開しない |
 | `BeginTx` | Tx 面を開始。ネストは `ErrNestedTx` |
@@ -51,7 +53,7 @@ State Adapter は差し替え可能。全 Backend が共有する内部契約は
 - **Phase 1:** インメモリ（`Memory`）
 - **Phase 2:** オンディスク SQLite ファイル（`SQLite`、ドライバ `modernc.org/sqlite`・CGO なし）。スキーマは単純 KV（`key TEXT PRIMARY KEY`、value に JSON）
 - **Phase 7 / v0.8.0:** Redis プロトコル State（`Redis`、クライアント `github.com/redis/go-redis/v9`・CGO なし）。**Valkey は同一アダプタ**（`state_backend=valkey` はエイリアス）。単一 HASH（`state_redis_key_prefix` または既定 `es4:state`）の field = 論理キー、value = JSON bytes
-- **Phase 7 / v0.8.0:** Firestore（`Firestore`、`cloud.google.com/go/firestore`）。単一 collection・1 論理キー = 1 ドキュメント。Doc ID = パス・パーセントエンコード（`/` → `%2F`）。フィールド最低限 `value`（JSON テキスト）。サブコレクション階層写像は採用しない。Emulator は `FIRESTORE_EMULATOR_HOST`（Options 外）
+- **Phase 7 / v0.8.0:** Firestore（`Firestore`、`cloud.google.com/go/firestore`）。単一 collection・1 論理キー = 1 ドキュメント。Doc ID = パス・パーセントエンコード＋ `:` → `%3A`（v0.10.0）。フィールド最低限 `value`（JSON テキスト）。サブコレクション階層写像は採用しない。Emulator は `FIRESTORE_EMULATOR_HOST`（Options 外）
 - Snapshot / Restore 用に Export / Replace を内部で持つ（論理 `{ "entries": { ... } }`。DB バイナリコピーはしない）
 
 ### Firestore Clear／Replace 範囲（重要）
@@ -100,6 +102,7 @@ State Adapter は差し替え可能。全 Backend が共有する内部契約は
 - Phase 5 plan（完了注記）: [`docs/plans/v0.6.0/state-backend-extension.md`](../../plans/v0.6.0/state-backend-extension.md)
 - v0.8.0 Redis／Valkey plan: [`docs/plans/v0.8.0/redis-valkey-state.md`](../../plans/v0.8.0/redis-valkey-state.md)
 - v0.8.0 Firestore plan: [`docs/plans/v0.8.0/firestore-state.md`](../../plans/v0.8.0/firestore-state.md)
+- v0.10.0 キーデリミタ／Scan plan（完了注記）: [`docs/plans/v0.10.0/key-delimiter.md`](../../plans/v0.10.0/key-delimiter.md)
 
 ----
 

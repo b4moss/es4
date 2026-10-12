@@ -134,7 +134,7 @@ flowchart LR
 
 ## 索引
 
-- [roadmap](./roadmap.md) — マイルストーン（Phase 0–6 / 暫定 SemVer `v0.1.0`–`v0.7.3`）
+- [roadmap](./roadmap.md) — マイルストーン（現行線 **v0.10.0**：キー `:` ＋ `Scan`）
 - [plans](./plans/) — これからやる内容
 - [Phase 0 決定事項](./plans/v0.1.0/scaffold.md#決定事項) — スキャフォールド完了・module path・最初の Git タグ方針
 - [Phase 1 仕様](./specs/state/) — State / [Snapshot](./specs/snapshot/) / [Recovery](./specs/recovery/) / [Options](./specs/options/)（`v0.2.0` 実装完了・plans から移動済み）
