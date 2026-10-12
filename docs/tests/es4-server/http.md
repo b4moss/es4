@@ -2,9 +2,12 @@
 
 HTTP Es4 Server（`packages/go/cmd/es4-server` / `internal/server`）のテスト仕様。  
 正本の振る舞い: [`docs/specs/es4-server/`](../../specs/es4-server/)。  
+計画・決定: [`docs/plans/v0.10.0/key-delimiter.md`](../../plans/v0.10.0/key-delimiter.md)（HTTP 写像 **A**・2026-10-11）。  
 必須検証: `cd packages/go && go test ./...`（外部クラウド不要）。
 
 正規パスはすべて **末尾 `/` なし**。末尾 `/` 付きは **404**（リダイレクトなし）。
+
+**キー写像（決定 A）:** 論理キーは URL パス **1 段**に載せる。例: 論理 `a:b:c` → `/v1/keys/a:b:c`。旧 `/v1/keys/a/b`（パス複数段＝旧 `/` 階層）は **サポートしない**（400 `invalid_key` または 404。実装で一方に固定しテストする）。
 
 ## 1. Health
 
@@ -29,16 +32,18 @@ HTTP Es4 Server（`packages/go/cmd/es4-server` / `internal/server`）のテス�
 ## 2. State HTTP（Ready 後）
 
 #### テスト：正常系
-- `PUT /v1/keys/a/b` body=`{"x":1}` → **200**
-- 直後 `GET` → **200**・同じ JSON
-- `HEAD` → **200**・本文なし
-- `DELETE` → **200**；直後 GET → **404** `not_found`；欠落 HEAD → **404**
+- `PUT /v1/keys/a:b` body=`{"x":1}` → **200**
+- 直後 `GET /v1/keys/a:b` → **200**・同じ JSON
+- `HEAD /v1/keys/a:b` → **200**・本文なし
+- `DELETE /v1/keys/a:b` → **200**；直後 GET → **404** `not_found`；欠落 HEAD → **404**
 - `POST /v1/clear` → **200**；複数キー後に全 GET 404
 - 単一セグメント `/v1/keys/a` も同様
+- 複数階層 `/v1/keys/a:b:c` も同様（パスは 1 段）
 
 #### テスト：異常系
 - 欠落 GET／DELETE → **404** `not_found`
-- 空キー相当 `/v1/keys`・`/v1/keys/`・規則違反キー → **400** `invalid_key`
+- 空キー相当 `/v1/keys`・`/v1/keys/`・規則違反キー（先頭/末尾 `:`・連続 `::`）→ **400** `invalid_key`
+- 旧形式の複数パス段（例: `/v1/keys/a/b`）→ **400** `invalid_key` または **404**（固定した一方でテスト）
 - 不正 JSON PUT → **400** `invalid_value`
 
 #### テスト：末尾スラッシュ
@@ -49,7 +54,7 @@ HTTP Es4 Server（`packages/go/cmd/es4-server` / `internal/server`）のテス�
 
 #### テスト：正常系
 - `POST /v1/tx` → **200** `{"id":"…"}`（非空）
-- Begin → PUT → commit → 外側 GET で見える
+- Begin → PUT `/v1/tx/{id}/keys/a:b` → commit → 外側 GET で見える
 - Begin → PUT → rollback → 外側 GET は 404
 - Tx 上の GET／HEAD／DELETE／clear が Tx 視界で動く
 
@@ -96,7 +101,7 @@ HTTP Es4 Server（`packages/go/cmd/es4-server` / `internal/server`）のテス�
 | `POST /v1/tx/{id}/rollback` | `…/rollback/` |
 | `POST /v1/tx/{id}/clear` | `…/clear/` |
 
-キー階層の `/`（例: `/v1/keys/a/b`）は本表の対象外。
+論理キー内の `:`（例: `/v1/keys/a:b:c`）はパス区切りではない。キーは常に `/v1/keys/` 直下の **1 セグメント**。
 
 ----
 

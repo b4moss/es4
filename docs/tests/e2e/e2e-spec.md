@@ -203,7 +203,7 @@ E2E では **方式 A** に固定する。
 ### 5.1 正常系 — 保存 → 再起動 → リカバリ
 
 1. es4 を Open（Object Recovery、`restore_on_startup=true`）
-2. State にキーを書く（階層キー可）。Tx を使う場合は **Commit まで完了**させる
+2. State にキーを書く（階層キー（`:`）可）。Tx を使う場合は **Commit まで完了**させる
 3. **Snapshot を Object へ Save 完了**まで待つ（明示フラッシュまたはヘルパ）。RustFS 上にプレフィックス配下のオブジェクトが 1 つ以上存在することを List または Head で確認してよい
 4. es4 を **Close**（プロセス再起動の代替。実プロセス fork でもよいが、Close→同一バイナリ再 Open で可）
 5. **同じ** bucket／prefix／endpoint（および State path 方針）で再度 Open
@@ -215,7 +215,7 @@ E2E では **方式 A** に固定する。
 
 ### 5.2 正常系 — 複数キー／階層
 
-- 複数キー（単一セグメントと `a/b/c`）を Save 後、再起動ですべて戻る
+- 複数キー（単一セグメントと `a:b:c`）を Save 後、再起動ですべて戻る
 
 ### 5.3 異常系／境界 — 未保存は戻らない（コミット済みのみの裏返し）
 
@@ -283,7 +283,7 @@ cd packages/go && go test -tags=e2e ./pkg/es4 -run 'TestE2E_FileSQLite_' -count=
 
 ### F.2 C2 — 複数キー／階層
 
-- 複数キー（単一セグメントと `a/b/c` 等）を Save 後、§F.0 の再起動手順ですべて戻る
+- 複数キー（単一セグメントと `a:b:c` 等）を Save 後、§F.0 の再起動手順ですべて戻る
 
 ### F.3 C3 — 未保存は戻らない
 
@@ -564,7 +564,7 @@ env:
 
 #### 推奨追加
 
-- F-N6: 階層キー `x/y/z` のエンコード往復
+- F-N6: 階層キー `x:y:z` のエンコード往復（Doc ID は `%3A` 写像。Go/Node 一致）
 - F-N7: 同一 project・別 collection の並行ケース非干渉
 - F-E3／F-E4: 無効キー／Get 欠落の sentinel 再確認
 

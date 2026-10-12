@@ -45,7 +45,7 @@
 ### 手順（検証どおり）
 
 1. Open（Object Recovery、`restore_on_startup=true`）
-2. State にキーを書く（実装例: `users/1` に JSON）
+2. State にキーを書く（実装例: `users:1` に JSON）
 3. `SnapshotNow` で Object へ Save 完了
 4. プレフィックス配下を List → オブジェクトが 1 つ以上（Save の実体確認）
 5. Close → 同じ bucket／prefix／endpoint で再 Open
@@ -66,7 +66,7 @@
 
 ### 手順（検証どおり）
 
-1. 複数キーを `Set`（仕様: 単一セグメントと `a/b/c`。実装はこれに加え `x/y`・`solo` および Tx `Begin`→`Set`→`Commit` の `tx/key` も Save 対象に含めて検証）
+1. 複数キーを `Set`（仕様: 単一セグメントと `a:b:c`。実装はこれに加え `x:y`・`solo` および Tx `Begin`→`Set`→`Commit` の `tx:key` も Save 対象に含めて検証）
 2. `SnapshotNow` → Close → 再 Open
 3. Save 対象とした全キーを `Get`
 
