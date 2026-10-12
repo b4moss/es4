@@ -11,11 +11,13 @@ import {
 import { AsyncMutex } from "./mutex.js";
 import {
   deepCopyRaw,
+  keysWithPrefix,
   type JsonRaw,
   type Store,
   type Tx,
   toEntriesMap,
   validateKey,
+  validateScanPrefix,
   validateValue,
 } from "./types.js";
 
@@ -110,6 +112,20 @@ export class SQLiteStore implements Store {
     throwIfAborted(signal);
     await this.withNoTx(() => {
       this.db.prepare(`DELETE FROM kv`).run();
+    });
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    return await this.withNoTx(() => {
+      const rows = this.db
+        .prepare(`SELECT key FROM kv`)
+        .all() as Array<{ key: string }>;
+      return keysWithPrefix(
+        rows.map((r) => r.key),
+        prefix,
+      );
     });
   }
 
@@ -288,6 +304,33 @@ class SQLiteOverlayTx implements Tx {
       this.guard();
       this.cleared = true;
       this.overlay = new Map();
+    });
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    return await this.s._mu().withLock(() => {
+      this.guard();
+      const seen = new Set<string>();
+      if (!this.cleared) {
+        const rows = this.s
+          ._db()
+          .prepare(`SELECT key FROM kv`)
+          .all() as Array<{ key: string }>;
+        for (const r of rows) {
+          if (prefix !== "" && !r.key.startsWith(prefix)) continue;
+          const e = this.overlay.get(r.key);
+          if (e?.deleted) continue;
+          seen.add(r.key);
+        }
+      }
+      for (const [k, e] of this.overlay) {
+        if (e.deleted) continue;
+        if (prefix !== "" && !k.startsWith(prefix)) continue;
+        seen.add(k);
+      }
+      return [...seen];
     });
   }
 

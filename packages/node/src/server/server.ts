@@ -143,7 +143,9 @@ export class Es4Server {
         return;
       }
 
-      const txKey = path.match(/^\/v1\/tx\/([^/]+)\/keys\/(.+)$/);
+      // Decision A: key is a single path segment (e.g. /v1/keys/a:b:c).
+      // Multi-segment /v1/keys/a/b does not match → 404.
+      const txKey = path.match(/^\/v1\/tx\/([^/]+)\/keys\/([^/]+)$/);
       if (txKey && ["PUT", "GET", "DELETE", "HEAD"].includes(method)) {
         if (!this.requireReady(res)) return;
         await this.handleTxKey(res, req, txKey[1]!, decodeURIComponent(txKey[2]!), method);
@@ -156,7 +158,7 @@ export class Es4Server {
         return;
       }
 
-      const stateKey = path.match(/^\/v1\/keys\/(.+)$/);
+      const stateKey = path.match(/^\/v1\/keys\/([^/]+)$/);
       if (stateKey && ["PUT", "GET", "DELETE", "HEAD"].includes(method)) {
         if (!this.requireReady(res)) return;
         await this.handleStateKey(

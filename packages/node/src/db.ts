@@ -169,6 +169,11 @@ export class DB {
     return this.state.clear(signal);
   }
 
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    this.guard(signal);
+    return this.state.scan(prefix, signal);
+  }
+
   async export(signal?: AbortSignal): Promise<Map<string, JsonRaw>> {
     this.guard(signal);
     return this.state.export(signal);

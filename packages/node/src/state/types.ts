@@ -13,6 +13,7 @@ export interface Tx {
   delete(key: string, signal?: AbortSignal): Promise<void>;
   exists(key: string, signal?: AbortSignal): Promise<boolean>;
   clear(signal?: AbortSignal): Promise<void>;
+  scan(prefix: string, signal?: AbortSignal): Promise<string[]>;
   commit(): Promise<void>;
   rollback(): Promise<void>;
 }
@@ -23,6 +24,8 @@ export interface Store {
   delete(key: string, signal?: AbortSignal): Promise<void>;
   exists(key: string, signal?: AbortSignal): Promise<boolean>;
   clear(signal?: AbortSignal): Promise<void>;
+  /** Bulk prefix listing (no paging). Empty prefix lists all keys. */
+  scan(prefix: string, signal?: AbortSignal): Promise<string[]>;
   export(signal?: AbortSignal): Promise<Map<string, JsonRaw>>;
   replace(
     entries: Map<string, JsonRaw> | Record<string, JsonRaw>,
@@ -36,15 +39,29 @@ export function validateKey(key: string): void {
   if (key === "") {
     throw wrapError(ErrInvalidKey, "empty");
   }
-  if (key.startsWith("/")) {
-    throw wrapError(ErrInvalidKey, "leading slash");
+  if (key.startsWith(":")) {
+    throw wrapError(ErrInvalidKey, "leading colon");
   }
-  if (key.endsWith("/")) {
-    throw wrapError(ErrInvalidKey, "trailing slash");
+  if (key.endsWith(":")) {
+    throw wrapError(ErrInvalidKey, "trailing colon");
   }
-  if (key.includes("//")) {
-    throw wrapError(ErrInvalidKey, "consecutive slashes");
+  if (key.includes("::")) {
+    throw wrapError(ErrInvalidKey, "consecutive colons");
   }
+}
+
+/** Empty prefix means all keys; otherwise same rules as validateKey. */
+export function validateScanPrefix(prefix: string): void {
+  if (prefix === "") return;
+  validateKey(prefix);
+}
+
+export function keysWithPrefix(keys: Iterable<string>, prefix: string): string[] {
+  const out: string[] = [];
+  for (const k of keys) {
+    if (prefix === "" || k.startsWith(prefix)) out.push(k);
+  }
+  return out;
 }
 
 export function validateValue(value: JsonRaw): void {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -208,6 +209,30 @@ func (r *Redis) Clear(ctx context.Context) error {
 		return fmt.Errorf("state: redis clear: %w", err)
 	}
 	return nil
+}
+
+func (r *Redis) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil, ErrClosed
+	}
+	r.waitNoActiveTxLocked()
+	if r.closed {
+		return nil, ErrClosed
+	}
+	fields, err := r.client.HKeys(ctx, r.hash).Result()
+	if err != nil {
+		return nil, fmt.Errorf("state: redis scan: %w", err)
+	}
+	return KeysWithPrefix(fields, prefix), nil
 }
 
 func (r *Redis) Export(ctx context.Context) (map[string]json.RawMessage, error) {
@@ -447,6 +472,43 @@ func (t *redisTx) Clear(ctx context.Context) error {
 		t.overlay = make(map[string]overlayEntry)
 		return nil
 	})
+}
+
+func (t *redisTx) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := ValidateScanPrefix(prefix); err != nil {
+		return nil, err
+	}
+	var out []string
+	err := t.withLock(ctx, func() error {
+		seen := make(map[string]struct{})
+		if !t.cleared {
+			fields, err := t.r.client.HKeys(ctx, t.r.hash).Result()
+			if err != nil {
+				return fmt.Errorf("state: redis tx scan: %w", err)
+			}
+			for _, k := range fields {
+				if !strings.HasPrefix(k, prefix) {
+					continue
+				}
+				if e, ok := t.overlay[k]; ok && e.deleted {
+					continue
+				}
+				seen[k] = struct{}{}
+			}
+		}
+		for k, e := range t.overlay {
+			if e.deleted || !strings.HasPrefix(k, prefix) {
+				continue
+			}
+			seen[k] = struct{}{}
+		}
+		out = make([]string, 0, len(seen))
+		for k := range seen {
+			out = append(out, k)
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (t *redisTx) Commit() error {

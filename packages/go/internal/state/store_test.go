@@ -18,24 +18,24 @@ func TestMemory_SetGetExistsDeleteClear(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	val := json.RawMessage(`{"n":1}`)
-	if err := m.Set(ctx, "a/b", val); err != nil {
+	if err := m.Set(ctx, "a:b", val); err != nil {
 		t.Fatal(err)
 	}
-	got, err := m.Get(ctx, "a/b")
+	got, err := m.Get(ctx, "a:b")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(val) {
 		t.Fatalf("get: got %s want %s", got, val)
 	}
-	ok, err := m.Exists(ctx, "a/b")
+	ok, err := m.Exists(ctx, "a:b")
 	if err != nil || !ok {
 		t.Fatalf("exists: ok=%v err=%v", ok, err)
 	}
-	if err := m.Delete(ctx, "a/b"); err != nil {
+	if err := m.Delete(ctx, "a:b"); err != nil {
 		t.Fatal(err)
 	}
-	ok, err = m.Exists(ctx, "a/b")
+	ok, err = m.Exists(ctx, "a:b")
 	if err != nil || ok {
 		t.Fatalf("exists after delete: ok=%v err=%v", ok, err)
 	}
@@ -94,13 +94,15 @@ func TestValidateKey(t *testing.T) {
 		ok  bool
 	}{
 		{"a", true},
-		{"a/b", true},
-		{"a/b/c", true},
+		{"a:b", true},
+		{"a:b:c", true},
+		{"a/b", true},   // `/` is an ordinary character
+		{"a:b/c", true},
 		{"", false},
-		{"/a", false},
-		{"a/", false},
-		{"a//b", false},
-		{"/", false},
+		{":a", false},
+		{"a:", false},
+		{"a::b", false},
+		{":", false},
 	}
 	for _, tc := range cases {
 		err := state.ValidateKey(tc.key)
@@ -166,14 +168,14 @@ func TestSQLite_APIParity(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 
 	val := json.RawMessage(`{"n":1}`)
-	if err := s.Set(ctx, "a/b", val); err != nil {
+	if err := s.Set(ctx, "a:b", val); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.Get(ctx, "a/b")
+	got, err := s.Get(ctx, "a:b")
 	if err != nil || string(got) != string(val) {
 		t.Fatalf("get: %s err=%v", got, err)
 	}
-	ok, err := s.Exists(ctx, "a/b")
+	ok, err := s.Exists(ctx, "a:b")
 	if err != nil || !ok {
 		t.Fatalf("exists: %v %v", ok, err)
 	}
@@ -189,7 +191,7 @@ func TestSQLite_APIParity(t *testing.T) {
 	if !errors.Is(err, state.ErrNotFound) {
 		t.Fatalf("delete missing: %v", err)
 	}
-	if err := s.Delete(ctx, "a/b"); err != nil {
+	if err := s.Delete(ctx, "a:b"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Set(ctx, "x", json.RawMessage(`true`)); err != nil {
@@ -298,12 +300,12 @@ func TestSQLite_ExportReplace_RoundTripWithMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sq.Close() })
-	_ = sq.Set(ctx, "a/b", json.RawMessage(`{"x":true}`))
+	_ = sq.Set(ctx, "a:b", json.RawMessage(`{"x":true}`))
 	exp, err := sq.Export(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := exp["a/b"]; !ok {
+	if _, ok := exp["a:b"]; !ok {
 		t.Fatal("export missing key")
 	}
 	mem := state.NewMemory()
@@ -311,7 +313,7 @@ func TestSQLite_ExportReplace_RoundTripWithMemory(t *testing.T) {
 	if err := mem.Replace(ctx, exp); err != nil {
 		t.Fatal(err)
 	}
-	got, err := mem.Get(ctx, "a/b")
+	got, err := mem.Get(ctx, "a:b")
 	if err != nil || string(got) != `{"x":true}` {
 		t.Fatalf("got %s err=%v", got, err)
 	}
@@ -327,7 +329,7 @@ func TestSQLite_ExportReplace_RoundTripWithMemory(t *testing.T) {
 	if err := sq2.Replace(ctx, back); err != nil {
 		t.Fatal(err)
 	}
-	got, err = sq2.Get(ctx, "a/b")
+	got, err = sq2.Get(ctx, "a:b")
 	if err != nil || string(got) != `{"x":true}` {
 		t.Fatalf("sqlite replace: %s err=%v", got, err)
 	}

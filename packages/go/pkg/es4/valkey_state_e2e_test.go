@@ -119,7 +119,7 @@ func TestE2E_ValkeyState_SaveRestartRestore(t *testing.T) {
 
 	db1 := f.open(ctx)
 	val := json.RawMessage(`{"hello":"valkey","n":1}`)
-	if err := db1.Set(ctx, "users/1", val); err != nil {
+	if err := db1.Set(ctx, "users:1", val); err != nil {
 		t.Fatal(err)
 	}
 	if err := db1.Close(); err != nil {
@@ -128,14 +128,14 @@ func TestE2E_ValkeyState_SaveRestartRestore(t *testing.T) {
 
 	db2 := f.open(ctx)
 	t.Cleanup(func() { _ = db2.Close() })
-	got, err := db2.Get(ctx, "users/1")
+	got, err := db2.Get(ctx, "users:1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(val) {
 		t.Fatalf("restored %s want %s", got, val)
 	}
-	ok, err := db2.Exists(ctx, "users/1")
+	ok, err := db2.Exists(ctx, "users:1")
 	if err != nil || !ok {
 		t.Fatalf("exists: %v %v", ok, err)
 	}
@@ -149,7 +149,7 @@ func TestE2E_ValkeyState_MultiKeyHierarchy(t *testing.T) {
 	db1 := f.open(ctx)
 	want := map[string]json.RawMessage{
 		"plain": json.RawMessage(`"a"`),
-		"a/b/c": json.RawMessage(`{"deep":true}`),
+		"a:b:c": json.RawMessage(`{"deep":true}`),
 		"x/y":   json.RawMessage(`[1,2,3]`),
 		"solo":  json.RawMessage(`42`),
 	}

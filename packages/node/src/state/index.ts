@@ -1,5 +1,10 @@
 export type { JsonRaw, Store, Tx } from "./types.js";
-export { validateKey, validateValue } from "./types.js";
+export {
+  validateKey,
+  validateValue,
+  validateScanPrefix,
+  keysWithPrefix,
+} from "./types.js";
 export { MemoryStore, newMemory } from "./memory.js";
 export { SQLiteStore, openSQLite } from "./sqlite.js";
 export {

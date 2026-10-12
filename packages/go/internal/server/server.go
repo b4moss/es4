@@ -43,10 +43,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /livez", s.handleLivez)
 	s.mux.HandleFunc("GET /readyz", s.handleReadyz)
 
-	s.mux.HandleFunc("PUT /v1/keys/{key...}", s.handleStateKey)
-	s.mux.HandleFunc("GET /v1/keys/{key...}", s.handleStateKey)
-	s.mux.HandleFunc("DELETE /v1/keys/{key...}", s.handleStateKey)
-	s.mux.HandleFunc("HEAD /v1/keys/{key...}", s.handleStateKey)
+	// Decision A: logical key is a single path segment (e.g. /v1/keys/a:b:c).
+	// Multi-segment paths like /v1/keys/a/b are not registered → 404.
+	s.mux.HandleFunc("PUT /v1/keys/{key}", s.handleStateKey)
+	s.mux.HandleFunc("GET /v1/keys/{key}", s.handleStateKey)
+	s.mux.HandleFunc("DELETE /v1/keys/{key}", s.handleStateKey)
+	s.mux.HandleFunc("HEAD /v1/keys/{key}", s.handleStateKey)
 	// Empty-key equivalents → invalid_key (not trailing-slash 404).
 	s.mux.HandleFunc("PUT /v1/keys", s.handleEmptyKey)
 	s.mux.HandleFunc("GET /v1/keys", s.handleEmptyKey)
@@ -57,10 +59,10 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("POST /v1/tx", s.handleTxBegin)
 
-	s.mux.HandleFunc("PUT /v1/tx/{id}/keys/{key...}", s.handleTxKey)
-	s.mux.HandleFunc("GET /v1/tx/{id}/keys/{key...}", s.handleTxKey)
-	s.mux.HandleFunc("DELETE /v1/tx/{id}/keys/{key...}", s.handleTxKey)
-	s.mux.HandleFunc("HEAD /v1/tx/{id}/keys/{key...}", s.handleTxKey)
+	s.mux.HandleFunc("PUT /v1/tx/{id}/keys/{key}", s.handleTxKey)
+	s.mux.HandleFunc("GET /v1/tx/{id}/keys/{key}", s.handleTxKey)
+	s.mux.HandleFunc("DELETE /v1/tx/{id}/keys/{key}", s.handleTxKey)
+	s.mux.HandleFunc("HEAD /v1/tx/{id}/keys/{key}", s.handleTxKey)
 	s.mux.HandleFunc("PUT /v1/tx/{id}/keys", s.handleTxEmptyKey)
 	s.mux.HandleFunc("GET /v1/tx/{id}/keys", s.handleTxEmptyKey)
 	s.mux.HandleFunc("DELETE /v1/tx/{id}/keys", s.handleTxEmptyKey)

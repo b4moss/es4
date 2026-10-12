@@ -44,18 +44,18 @@ describe("Server H-*", () => {
 
   it("H-N3 REST State", async () => {
     await withServer(async (base) => {
-      const put = await fetch(`${base}/v1/keys/a/b`, {
+      const put = await fetch(`${base}/v1/keys/a:b`, {
         method: "PUT",
         body: `{"x":1}`,
         headers: { "Content-Type": "application/json" },
       });
       expect(put.status).toBe(200);
-      const get = await fetch(`${base}/v1/keys/a/b`);
+      const get = await fetch(`${base}/v1/keys/a:b`);
       expect(get.status).toBe(200);
       expect(await get.text()).toBe(`{"x":1}`);
-      const head = await fetch(`${base}/v1/keys/a/b`, { method: "HEAD" });
+      const head = await fetch(`${base}/v1/keys/a:b`, { method: "HEAD" });
       expect(head.status).toBe(200);
-      const del = await fetch(`${base}/v1/keys/a/b`, { method: "DELETE" });
+      const del = await fetch(`${base}/v1/keys/a:b`, { method: "DELETE" });
       expect(del.status).toBe(200);
     });
   });
@@ -75,6 +75,22 @@ describe("Server H-*", () => {
       expect(get.status).toBe(400);
       const body = (await get.json()) as { error: { code: string } };
       expect(body.error.code).toBe("invalid_key");
+    });
+  });
+
+  it("H-N colon key single segment; multi-segment 404", async () => {
+    await withServer(async (base) => {
+      const put = await fetch(`${base}/v1/keys/a:b:c`, {
+        method: "PUT",
+        body: `{"n":3}`,
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(put.status).toBe(200);
+      const get = await fetch(`${base}/v1/keys/a:b:c`);
+      expect(get.status).toBe(200);
+      expect(await get.text()).toBe(`{"n":3}`);
+      const legacy = await fetch(`${base}/v1/keys/a/b`);
+      expect(legacy.status).toBe(404);
     });
   });
 });

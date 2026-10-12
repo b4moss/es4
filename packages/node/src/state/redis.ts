@@ -11,12 +11,14 @@ import { DEFAULT_REDIS_HASH_KEY } from "../options/types.js";
 import { AsyncMutex } from "./mutex.js";
 import {
   deepCopyRaw,
+  keysWithPrefix,
   type JsonRaw,
   type OverlayEntry,
   type Store,
   type Tx,
   toEntriesMap,
   validateKey,
+  validateScanPrefix,
   validateValue,
 } from "./types.js";
 
@@ -147,6 +149,15 @@ export class RedisStore implements Store {
     throwIfAborted(signal);
     await this.withNoTx(async () => {
       await this.client.del(this.hash);
+    });
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    return await this.withNoTx(async () => {
+      const fields = await this.client.hkeys(this.hash);
+      return keysWithPrefix(fields, prefix);
     });
   }
 
@@ -315,6 +326,30 @@ class RedisOverlayTx implements Tx {
       this.guard();
       this.cleared = true;
       this.overlay = new Map();
+    });
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    return await this.r._mu().withLock(async () => {
+      this.guard();
+      const seen = new Set<string>();
+      if (!this.cleared) {
+        const fields = await this.r._client().hkeys(this.r.hash);
+        for (const k of fields) {
+          if (prefix !== "" && !k.startsWith(prefix)) continue;
+          const e = this.overlay.get(k);
+          if (e?.deleted) continue;
+          seen.add(k);
+        }
+      }
+      for (const [k, e] of this.overlay) {
+        if (e.deleted) continue;
+        if (prefix !== "" && !k.startsWith(prefix)) continue;
+        seen.add(k);
+      }
+      return [...seen];
     });
   }
 

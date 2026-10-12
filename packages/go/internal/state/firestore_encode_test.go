@@ -15,7 +15,7 @@ func TestEncodeFirestoreDocID(t *testing.T) {
 		want string
 	}{
 		{"K-N1 single", "a", "a"},
-		{"K-N2 hierarchy", "a/b/c", "a%2Fb%2Fc"},
+		{"K-N2 hierarchy", "a:b:c", "a%3Ab%3Ac"},
 		{"space", "a b", "a%20b"},
 	}
 	for _, tc := range cases {

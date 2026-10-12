@@ -6,9 +6,9 @@ import {
 import { ErrFirestoreDocIDTooLong, isEs4Error } from "../src/errors.js";
 
 describe("Firestore key mapping K-N*", () => {
-  it("K-N encode a/b/c → a%2Fb%2Fc", () => {
-    expect(encodeFirestoreDocID("a/b/c")).toBe("a%2Fb%2Fc");
-    expect(decodeFirestoreDocID("a%2Fb%2Fc")).toBe("a/b/c");
+  it("K-N encode a:b:c → a%3Ab%3Ac", () => {
+    expect(encodeFirestoreDocID("a:b:c")).toBe("a%3Ab%3Ac");
+    expect(decodeFirestoreDocID("a%3Ab%3Ac")).toBe("a:b:c");
   });
 
   it("K-E doc id too long", () => {

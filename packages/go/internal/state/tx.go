@@ -14,6 +14,8 @@ type Tx interface {
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
+	// Scan lists keys visible in this transaction (overlay + base unless cleared).
+	Scan(ctx context.Context, prefix string) ([]string, error)
 	Commit() error
 	Rollback() error
 }

@@ -12,12 +12,14 @@ import { DEFAULT_FIRESTORE_DATABASE_ID } from "../options/types.js";
 import { AsyncMutex } from "./mutex.js";
 import {
   deepCopyRaw,
+  keysWithPrefix,
   type JsonRaw,
   type OverlayEntry,
   type Store,
   type Tx,
   toEntriesMap,
   validateKey,
+  validateScanPrefix,
   validateValue,
 } from "./types.js";
 
@@ -25,10 +27,11 @@ const FIRESTORE_MAX_DOC_ID_BYTES = 1500;
 
 /**
  * Path-percent-encode matching Go `url.PathEscape` for typical keys.
- * Especially: "/" → "%2F".
+ * Hierarchical `:` → `%3A`; ordinary `/` → `%2F`.
  */
 export function encodeFirestoreDocID(logicalKey: string): string {
   // Go url.PathEscape encodes each path segment; "/" between segments → %2F.
+  // Keys may contain `/` as an ordinary character; `:` is the hierarchy delimiter.
   const id = logicalKey
     .split("/")
     .map((seg) => encodeURIComponent(seg).replace(/[!'()*]/g, (c) => {
@@ -232,6 +235,19 @@ export class FirestoreStore implements Store {
     });
   }
 
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    return await this.withNoTx(async () => {
+      const snap = await this.coll().get();
+      const keys: string[] = [];
+      for (const doc of snap.docs) {
+        keys.push(decodeFirestoreDocID(doc.id));
+      }
+      return keysWithPrefix(keys, prefix);
+    });
+  }
+
   async export(signal?: AbortSignal): Promise<Map<string, JsonRaw>> {
     throwIfAborted(signal);
     return await this.withNoTx(async () => {
@@ -412,6 +428,31 @@ class FirestoreOverlayTx implements Tx {
       this.guard();
       this.cleared = true;
       this.overlay = new Map();
+    });
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    return await this.f._mu().withLock(async () => {
+      this.guard();
+      const seen = new Set<string>();
+      if (!this.cleared) {
+        const snap = await this.f._coll().get();
+        for (const doc of snap.docs) {
+          const logical = decodeFirestoreDocID(doc.id);
+          if (prefix !== "" && !logical.startsWith(prefix)) continue;
+          const e = this.overlay.get(logical);
+          if (e?.deleted) continue;
+          seen.add(logical);
+        }
+      }
+      for (const [k, e] of this.overlay) {
+        if (e.deleted) continue;
+        if (prefix !== "" && !k.startsWith(prefix)) continue;
+        seen.add(k);
+      }
+      return [...seen];
     });
   }
 

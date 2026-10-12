@@ -7,12 +7,14 @@ import {
 } from "../errors.js";
 import {
   deepCopyRaw,
+  keysWithPrefix,
   type JsonRaw,
   type OverlayEntry,
   type Store,
   type Tx,
   toEntriesMap,
   validateKey,
+  validateScanPrefix,
   validateValue,
 } from "./types.js";
 
@@ -57,6 +59,13 @@ export class MemoryStore implements Store {
     throwIfAborted(signal);
     if (this.closed) throw ErrClosed;
     this.entries = new Map();
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    if (this.closed) throw ErrClosed;
+    return keysWithPrefix(this.entries.keys(), prefix);
   }
 
   async export(signal?: AbortSignal): Promise<Map<string, JsonRaw>> {
@@ -191,6 +200,27 @@ class MemoryTx implements Tx {
     this.guard();
     this.cleared = true;
     this.overlay = new Map();
+  }
+
+  async scan(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    throwIfAborted(signal);
+    validateScanPrefix(prefix);
+    this.guard();
+    const seen = new Set<string>();
+    if (!this.cleared) {
+      for (const k of this.m._entries().keys()) {
+        if (prefix !== "" && !k.startsWith(prefix)) continue;
+        const e = this.overlay.get(k);
+        if (e?.deleted) continue;
+        seen.add(k);
+      }
+    }
+    for (const [k, e] of this.overlay) {
+      if (e.deleted) continue;
+      if (prefix !== "" && !k.startsWith(prefix)) continue;
+      seen.add(k);
+    }
+    return [...seen];
   }
 
   async commit(): Promise<void> {

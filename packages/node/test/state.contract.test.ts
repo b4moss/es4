@@ -65,8 +65,38 @@ async function runContract(name: string, openStore: () => Promise<Store> | Store
     it("S-N5 hierarchy keys", async () => {
       const s = await openStore();
       try {
-        await s.set("a/b/c", `"ok"`);
-        expect(await s.get("a/b/c")).toBe(`"ok"`);
+        await s.set("a:b:c", `"ok"`);
+        expect(await s.get("a:b:c")).toBe(`"ok"`);
+        await s.set("a/b", `"slash-ok"`);
+        expect(await s.get("a/b")).toBe(`"slash-ok"`);
+      } finally {
+        await s.close();
+      }
+    });
+
+    it("S-N Scan prefix", async () => {
+      const s = await openStore();
+      try {
+        await s.set("a:b:1", `1`);
+        await s.set("a:b:2", `2`);
+        await s.set("a:c:1", `3`);
+        const got = await s.scan("a:b");
+        expect(new Set(got)).toEqual(new Set(["a:b:1", "a:b:2"]));
+        const all = await s.scan("");
+        expect(new Set(all)).toEqual(new Set(["a:b:1", "a:b:2", "a:c:1"]));
+        await expect(s.scan(":a")).rejects.toSatisfy((e) =>
+          isEs4Error(e, ErrInvalidKey),
+        );
+
+        const tx = await s.beginTx();
+        await tx.set("a:b:3", `3`);
+        expect(new Set(await tx.scan("a:b"))).toEqual(
+          new Set(["a:b:1", "a:b:2", "a:b:3"]),
+        );
+        await tx.rollback();
+        expect(new Set(await s.scan("a:b"))).toEqual(
+          new Set(["a:b:1", "a:b:2"]),
+        );
       } finally {
         await s.close();
       }
@@ -177,7 +207,7 @@ async function runContract(name: string, openStore: () => Promise<Store> | Store
         await expect(s.set("", `1`)).rejects.toSatisfy((e) =>
           isEs4Error(e, ErrInvalidKey),
         );
-        await expect(s.set("/a", `1`)).rejects.toSatisfy((e) =>
+        await expect(s.set(":a", `1`)).rejects.toSatisfy((e) =>
           isEs4Error(e, ErrInvalidKey),
         );
       } finally {
@@ -252,9 +282,10 @@ await runContract("SQLite", async () => {
 describe("keys", () => {
   it("validateKey rejects bad forms", () => {
     expect(() => validateKey("")).toThrow();
-    expect(() => validateKey("/a")).toThrow();
-    expect(() => validateKey("a/")).toThrow();
-    expect(() => validateKey("a//b")).toThrow();
+    expect(() => validateKey(":a")).toThrow();
+    expect(() => validateKey("a:")).toThrow();
+    expect(() => validateKey("a::b")).toThrow();
+    expect(() => validateKey("a:b")).not.toThrow();
     expect(() => validateKey("a/b")).not.toThrow();
   });
 });
@@ -289,12 +320,12 @@ describe("S-N14 isolation", () => {
 describe("S-N15 Export→Replace roundtrip", () => {
   it("memory → sqlite", async () => {
     const m = newMemory();
-    await m.set("a/b", `{"x":1}`);
+    await m.set("a:b", `{"x":1}`);
     const exp = await m.export();
     const dir = await mkdtemp(join(tmpdir(), "es4-sqlite-"));
     const s = openSQLite(join(dir, "rt.db"));
     await s.replace(exp);
-    expect(await s.get("a/b")).toBe(`{"x":1}`);
+    expect(await s.get("a:b")).toBe(`{"x":1}`);
     await m.close();
     await s.close();
   });

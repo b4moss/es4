@@ -46,7 +46,7 @@ func TestE2E_LibSQLMemory_MultiKeyOps(t *testing.T) {
 
 	want := map[string]json.RawMessage{
 		"plain": json.RawMessage(`"a"`),
-		"a/b/c": json.RawMessage(`{"deep":true}`),
+		"a:b:c": json.RawMessage(`{"deep":true}`),
 		"x/y":   json.RawMessage(`[1,2,3]`),
 		"solo":  json.RawMessage(`42`),
 	}

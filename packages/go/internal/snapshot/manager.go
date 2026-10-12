@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,6 +176,9 @@ func DecodeMemoryPayload(payload json.RawMessage) (MemoryPayload, error) {
 // RestoreInto loads Recovery data (if any) into State. Missing/unreadable
 // recovery is treated as empty by the caller; this function applies a decoded
 // envelope's payload into state.
+//
+// Decision D (v0.10.0): entries whose keys contain `/` (pre-colon hierarchy)
+// or fail ValidateKey are dropped before Replace. Open itself still succeeds.
 func RestoreInto(ctx context.Context, st state.Store, data []byte) error {
 	env, err := DecodeEnvelope(data)
 	if err != nil {
@@ -184,5 +188,21 @@ func RestoreInto(ctx context.Context, st state.Store, data []byte) error {
 	if err != nil {
 		return err
 	}
-	return st.Replace(ctx, payload.Entries)
+	return st.Replace(ctx, filterRestoreEntries(payload.Entries))
+}
+
+// filterRestoreEntries drops legacy slash-hierarchy keys and invalid keys
+// (decision D). Remaining entries are kept for Replace.
+func filterRestoreEntries(entries map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(entries))
+	for k, v := range entries {
+		if strings.Contains(k, "/") {
+			continue
+		}
+		if err := state.ValidateKey(k); err != nil {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }

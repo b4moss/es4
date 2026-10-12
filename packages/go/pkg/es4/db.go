@@ -261,6 +261,15 @@ func (db *DB) Clear(ctx context.Context) error {
 	return db.state.Clear(ctx)
 }
 
+// Scan returns logical keys matching prefix (string prefix, bulk, no paging).
+// Empty prefix lists all keys.
+func (db *DB) Scan(ctx context.Context, prefix string) ([]string, error) {
+	if err := db.guard(ctx); err != nil {
+		return nil, err
+	}
+	return db.state.Scan(ctx, prefix)
+}
+
 // BeginTx starts a transaction (Tx API; separate from the non-Tx State API).
 // Nested Begin returns ErrNestedTx. Uncommitted transactions are rolled back
 // on Close.

@@ -63,28 +63,28 @@ func TestStoreContract_CRUD(t *testing.T) {
 		ctx := context.Background()
 		val := json.RawMessage(`{"n":1}`)
 
-		if err := st.Set(ctx, "a/b", val); err != nil {
+		if err := st.Set(ctx, "a:b", val); err != nil {
 			t.Fatal(err)
 		}
-		got, err := st.Get(ctx, "a/b")
+		got, err := st.Get(ctx, "a:b")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if string(got) != string(val) {
 			t.Fatalf("get: got %s want %s", got, val)
 		}
-		ok, err := st.Exists(ctx, "a/b")
+		ok, err := st.Exists(ctx, "a:b")
 		if err != nil || !ok {
 			t.Fatalf("exists: ok=%v err=%v", ok, err)
 		}
-		if err := st.Delete(ctx, "a/b"); err != nil {
+		if err := st.Delete(ctx, "a:b"); err != nil {
 			t.Fatal(err)
 		}
-		ok, err = st.Exists(ctx, "a/b")
+		ok, err = st.Exists(ctx, "a:b")
 		if err != nil || ok {
 			t.Fatalf("exists after delete: ok=%v err=%v", ok, err)
 		}
-		_, err = st.Get(ctx, "a/b")
+		_, err = st.Get(ctx, "a:b")
 		if !errors.Is(err, state.ErrNotFound) {
 			t.Fatalf("get after delete: %v", err)
 		}
@@ -185,9 +185,104 @@ func TestStoreContract_BeginTxCommit(t *testing.T) {
 	})
 }
 
+func TestStoreContract_Scan(t *testing.T) {
+	t.Parallel()
+	forEachStore(t, "scan", func(t *testing.T, st state.Store) {
+		ctx := context.Background()
+		for _, k := range []string{"a:b:1", "a:b:2", "a:c:1"} {
+			if err := st.Set(ctx, k, json.RawMessage(`1`)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := st.Scan(ctx, "a:b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertKeySet(t, got, "a:b:1", "a:b:2")
+
+		all, err := st.Scan(ctx, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertKeySet(t, all, "a:b:1", "a:b:2", "a:c:1")
+
+		empty, err := st.Scan(ctx, "missing")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(empty) != 0 {
+			t.Fatalf("missing prefix: got %v", empty)
+		}
+
+		for _, bad := range []string{":a", "a:", "a::b"} {
+			_, err := st.Scan(ctx, bad)
+			if !errors.Is(err, state.ErrInvalidKey) {
+				t.Fatalf("Scan(%q): got %v want ErrInvalidKey", bad, err)
+			}
+		}
+
+		// Slash is ordinary — Set and Scan both accept it.
+		if err := st.Set(ctx, "path/file", json.RawMessage(`9`)); err != nil {
+			t.Fatal(err)
+		}
+		slash, err := st.Scan(ctx, "path/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertKeySet(t, slash, "path/file")
+	})
+}
+
+func TestStoreContract_ScanInTx(t *testing.T) {
+	t.Parallel()
+	forEachStore(t, "scan_in_tx", func(t *testing.T, st state.Store) {
+		ctx := context.Background()
+		_ = st.Set(ctx, "a:b:1", json.RawMessage(`1`))
+		tx, err := st.BeginTx(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Set(ctx, "a:b:2", json.RawMessage(`2`)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := tx.Scan(ctx, "a:b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertKeySet(t, got, "a:b:1", "a:b:2")
+
+		// Do not call Store.Scan while a Tx is open: SQLite/Redis Serialize
+		// Store ops behind waitNoActiveTxLocked (would deadlock).
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+		after, err := st.Scan(ctx, "a:b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertKeySet(t, after, "a:b:1")
+	})
+}
+
+func assertKeySet(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("key set size: got %v want %v", got, want)
+	}
+	m := make(map[string]struct{}, len(got))
+	for _, k := range got {
+		m[k] = struct{}{}
+	}
+	for _, k := range want {
+		if _, ok := m[k]; !ok {
+			t.Fatalf("missing key %q in %v", k, got)
+		}
+	}
+}
+
 func TestStoreContract_InvalidKeyValue(t *testing.T) {
 	t.Parallel()
-	invalidKeys := []string{"", "/a", "a/", "a//b"}
+	invalidKeys := []string{"", ":a", "a:", "a::b"}
 	forEachStore(t, "invalid_keys", func(t *testing.T, st state.Store) {
 		ctx := context.Background()
 		for _, key := range invalidKeys {
@@ -419,6 +514,10 @@ func TestStoreContract_AfterClose(t *testing.T) {
 				}},
 				{"Clear", func() error {
 					return st.Clear(ctx)
+				}},
+				{"Scan", func() error {
+					_, err := st.Scan(ctx, "a")
+					return err
 				}},
 				{"Export", func() error {
 					_, err := st.Export(ctx)
