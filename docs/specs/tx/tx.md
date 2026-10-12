@@ -4,15 +4,15 @@ State API とは**別面**の公開トランザクション API の正本（Phas
 
 ## 概要
 
-`BeginTx` で開始し、Tx 上で `SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` を行い、`Commit` / `Rollback` で終了する。  
-実装: `packages/go/pkg/es4`（公開）と `packages/go/internal/state`（Memory / SQLite）。
+`BeginTx` で開始し、Tx 上で `SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` / `SCAN` を行い、`Commit` / `Rollback` で終了する。  
+実装: `packages/go/pkg/es4`（公開）と `packages/go/internal/state`（Memory / SQLite / Redis・Valkey / Firestore）。
 
 ## 操作
 
 | 操作 | 備考 |
 |------|------|
 | `BeginTx(ctx)` | ネスト不可（既に Tx 中ならエラー） |
-| Tx `SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` | キー／値規則は State API と同じ。欠落 GET/DELETE → エラー、EXISTS → false |
+| Tx `SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` / `SCAN` | キー／値規則は State API と同じ（v0.10.0: `:` 区切り・`Scan`）。欠落 GET/DELETE → エラー、EXISTS → false |
 | `Commit` | 変更を確定。以降の Tx 再利用はエラー |
 | `Rollback` | 変更を破棄。以降の Tx 再利用はエラー |
 

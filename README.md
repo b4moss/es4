@@ -13,7 +13,7 @@ Embedded server-side state store with pluggable Recovery — for when you want d
 
 Product knowledge lives under **[`docs/`](./docs/)** (OKF). This root README is the canonical English entry for install and usage; deeper specs and plans stay in `docs/`.
 
-Current monorepo line: **Git tag `v0.8.0`** (Go library). Node.js／TypeScript port is **`packages/node`** (`@b4moss/es4` **v0.9.0** on npm).
+Current monorepo line: **Git tag `v0.10.0`** (Go `packages/go` + Node `@b4moss/es4` stay in lockstep). **BREAKING** vs v0.9.0: key hierarchy delimiter `/` → `:` and `Scan(prefix)`.
 
 ## Purpose
 
@@ -24,24 +24,16 @@ Current monorepo line: **Git tag `v0.8.0`** (Go library). Node.js／TypeScript p
 
 ## Scope
 
-**In scope (implemented in Go at `v0.7.3`):**
+**In scope (Go + Node at `v0.10.0`):**
 
 | Layer | Choices |
 |-------|---------|
 | State | Memory · on-disk SQLite (`state_path`) · Redis／Valkey (`state_backend` + `state_redis_url`) · Firestore (`state_backend=firestore`) |
-| Recovery | `file` · `libsql` (local) · `object` (S3-compatible) |
-| Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` · Tx: `BeginTx` → Commit/Rollback |
-| Server | HTTP Es4 Server + Docker image workflows |
-| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis State · Valkey State · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore **not** in `layer=all`) |
-
-**Also in scope (Node at `packages/node`, milestone v0.9.0):**
-
-| Layer | Choices |
-|-------|---------|
-| State | Memory · SQLite · Redis／Valkey · Firestore (same Options vocabulary as Go) |
 | Recovery | `file` · `libsql` (local) · `object` (S3-compatible) — internal only |
-| Public API | `open` / `close` · State · Tx · HTTP Es4 Server |
-| E2E | Same layers／catalog IDs as Go (`npm run test:e2e:<layer>`) |
+| Keys | Hierarchy delimiter **`:`** (`/` is an ordinary character). Reject empty / leading / trailing `:` / `::` |
+| Public API | State: `Set` / `Get` / `Delete` / `Exists` / `Clear` / `Scan(prefix)` · Tx: `BeginTx` → Commit/Rollback (Scan on Tx) |
+| Server | HTTP Es4 Server + Docker — keys as one path segment (`/v1/keys/a:b:c`) |
+| E2E | Object (RustFS) · File SQLite · Memory · libSQL File/Memory · Redis · Valkey · Firestore Emulator (`workflow_dispatch`; redis／valkey／firestore **not** in `layer=all`) |
 
 **Out of scope / not yet:**
 
@@ -59,10 +51,10 @@ Module path (current, until a rename is approved):
 github.com/b4moss/es4/packages/go
 ```
 
-Nested Go module tags (`packages/go/vX.Y.Z`) are not published yet (`packages/go/VERSION` is still `0.7.1`). Pin the monorepo commit for tag `v0.7.3`:
+Go module tag: `packages/go/v0.10.0` (see `packages/go/VERSION`).
 
 ```bash
-go get github.com/b4moss/es4/packages/go@b43247463bb76a8758829ad819f4070b9986e366
+go get github.com/b4moss/es4/packages/go@v0.10.0
 ```
 
 Import:

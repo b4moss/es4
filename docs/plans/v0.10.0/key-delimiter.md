@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 |------|-----|
-| 状態 | **決定事項反映済み**（一問一答 2026-10-11）。実装未着手 |
-| マイルストーン | [v0.10.0](https://github.com/b4moss/es4/milestone/1)（次 minor・現行リリース v0.9.0 の次） |
+| 状態 | **完了**（実装 #39・タグ `v0.10.0` + npm。Issue [#37](https://github.com/b4moss/es4/issues/37) クローズ。意味論は specs へ反映済み） |
+| マイルストーン | [v0.10.0](https://github.com/b4moss/es4/milestone/1) |
 | Tracking Issue | [#37](https://github.com/b4moss/es4/issues/37) |
 | Plans PR | [#36](https://github.com/b4moss/es4/pull/36)（base: `main`・merged） |
 | 対象リポジトリ | [b4moss/es4](https://github.com/b4moss/es4) |
@@ -27,7 +27,7 @@
 
 **実装順:** デリミタ変更 → Scan →（その後）ss-cachian Driver。
 
-**本ファイルの位置づけ:** es4 リポジトリ内 `docs/plans/` の正本（v0.10.0）。実装コードは別途。charter どおり実装 Agent は本ファイルを編集しない。
+**本ファイルの位置づけ:** 完了注記。現行の振る舞い正本は [`docs/specs/state/`](../../specs/state/) · [`docs/specs/es4-server/`](../../specs/es4-server/) · [`docs/tests/state/`](../../tests/state/)。
 
 **方針更新（確定）:** 以前の「ss-cachian とキー規則を揃えない／opaque」は **撤回**。es4 側を Redis/Valkey スタイル（階層区切り **`:`**）に合わせる。
 
