@@ -3,8 +3,11 @@ name: Publish npm
 # Publishes @b4moss/es4 from packages/node.
 #
 # Ongoing path (Trusted Publisher / OIDC):
-#   Push to `release` → npm publish --access public --provenance
-#   No NODE_AUTH_TOKEN. Configure npm Trusted Publisher for:
+#   Push to `release`, or workflow_dispatch without first_publish
+#   → npm publish --access public --provenance
+#   No NODE_AUTH_TOKEN. Do not set setup-node registry-url (it writes an empty
+#   _authToken that blocks the OIDC exchange → E404). Match ss-cachian npm CD.
+#   Configure npm Trusted Publisher for:
 #     package @b4moss/es4 → GitHub org b4moss, repo es4, workflow publish-npm.yml
 #
 # One-shot first create (token):
@@ -40,11 +43,6 @@ jobs:
     name: publish @b4moss/es4
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Push to release → OIDC path.
-    # workflow_dispatch → only when first_publish is explicitly requested.
-    if: >
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.first_publish == true)
     defaults:
       run:
         working-directory: packages/node
@@ -54,11 +52,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # No registry-url: avoids writing //registry.npmjs.org/:_authToken=… into
+      # ~/.npmrc (empty NODE_AUTH_TOKEN then yields ENEEDAUTH/E404 instead of OIDC).
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
+          node-version: "22"
           cache: npm
           cache-dependency-path: packages/node/package-lock.json
 
@@ -90,8 +89,23 @@ jobs:
       - name: Publish to npm (Trusted Publisher / OIDC)
         if: >
           steps.decide.outputs.skip != 'true' &&
-          github.event_name == 'push'
-        run: npm publish --access public --provenance
+          (github.event_name == 'push' ||
+           (github.event_name == 'workflow_dispatch' && inputs.first_publish != true))
+        env:
+          # Explicit empty: token auth bypasses Trusted Publisher.
+          NODE_AUTH_TOKEN: ""
+        run: |
+          set -euo pipefail
+          # Trusted Publishing needs a recent npm CLI (OIDC exchange).
+          npm install -g npm@latest
+          npm --version
+          if [[ -f "$HOME/.npmrc" ]]; then
+            sed -i '/_authToken/d' "$HOME/.npmrc" || true
+          fi
+          if [[ -n "${NPM_CONFIG_USERCONFIG:-}" && -f "${NPM_CONFIG_USERCONFIG}" ]]; then
+            sed -i '/_authToken/d' "${NPM_CONFIG_USERCONFIG}" || true
+          fi
+          npm publish --access public --provenance
 
       - name: Publish to npm (first create via NPM_TOKEN)
         if: >
@@ -108,5 +122,7 @@ jobs:
             exit 1
           fi
           echo "Publishing first package create with NPM_TOKEN (provenance enabled)."
-          echo "After this succeeds, configure Trusted Publisher and use push-to-release only."
+          echo "After this succeeds, configure Trusted Publisher and use push-to-release / OIDC dispatch only."
+          # Token path needs an auth line (OIDC path intentionally omits registry-url).
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> "$HOME/.npmrc"
           npm publish --access public --provenance
