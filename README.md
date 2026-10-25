@@ -340,7 +340,7 @@ When authoring new libSQL cases, follow the existing harness: temp-dir isolation
 | [`docs/plans/`](./docs/plans/) | Upcoming / completed plan notes |
 | [`docs/specs/`](./docs/specs/) | Normative specs: options · state · tx · snapshot · recovery · es4-server |
 | [`docs/tests/`](./docs/tests/) | Test specs, including [`docs/tests/e2e/`](./docs/tests/e2e/) |
-| [`docs/charter/`](./docs/charter/) | Engineering charter (OKF, TDD, versioning, git) |
+| [`b4moss/charter` (v1)](https://github.com/b4moss/charter/tree/v1/docs/charter) | Engineering charter (OKF, TDD, versioning, git). See AGENTS.md 「開発憲章（charter）」 |
 | [`.github/CI.md`](./.github/CI.md) | CI / E2E / release policy |
 
 Prefer **code + specs** over older roadmap wording when they disagree.
