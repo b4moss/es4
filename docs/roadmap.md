@@ -18,10 +18,13 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 | `v0.8.0`（暫定） | Phase 7 — 外部サービスの充実（State Backend） | **実装完了**（Git タグ `v0.8.0`。Redis／Valkey＋Firestore State + E2E） | Redis／Valkey（同一アダプタ）と Firestore を State Backend として追加 | [plans/v0.8.0](./plans/v0.8.0/) · [specs/state](./specs/state/) · [tests/e2e](./tests/e2e/) |
 | `v0.9.0`（暫定） | Phase 8 — Node.js／TypeScript ポート | **実装完了**（Git タグ `v0.9.0` + npm `@b4moss/es4@0.9.0`） | Go `v0.8.0` 契約を `packages/node` に同型移植（Options／State／Tx／Recovery／Server／E2E） | [plans/v0.9.0](./plans/v0.9.0/) |
 | `v0.10.0`（暫定） | Phase 9 — キーデリミタ `:` 化 ＋ Scan | **実装完了**（Git タグ `v0.10.0` + Go module `packages/go/v0.10.0` + npm `@b4moss/es4@0.10.0`） | 論理キー `/` → `:`（破壊的）＋薄い `Scan(prefix)` | [plans/v0.10.0](./plans/v0.10.0/) · [specs/state](./specs/state/) · [specs/es4-server](./specs/es4-server/) |
+| `v0.11.0`（暫定） | Phase 10 — 期限付き書き込み（expires_at） | **方針確定**（docs のみ。要決定クローズ 2026-10-28。コード未着手） | Set＋options（`WithExpiresAt`）。Firestore 日時型 `expires_at`。読取時期限切れ＝不在。HTTP クエリ。Redis は読取フィルタ。Export は値のみ | [plans/v0.11.0](./plans/v0.11.0/) |
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。
 
 プロダクト親論点は各 Phase の決定事項／現行 specs へ落とした。[plans/open-questions.md](./plans/open-questions.md) は**残件なし**。Phase 0: [scaffold](./plans/v0.1.0/scaffold.md#決定事項)、Phase 1: [state](./specs/state/) · [snapshot](./specs/snapshot/) · [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 2: [state](./specs/state/) · [tx](./specs/tx/) · [options](./specs/options/)、Phase 3: [recovery](./specs/recovery/) · [options](./specs/options/)、Phase 4: [es4-server](./specs/es4-server/)、Phase 5: [state](./specs/state/)（[完了注記](./plans/v0.6.0/state-backend-extension.md)）、Phase 6: [e2e](./tests/e2e/)（[v0.7.0](./plans/v0.7.0/e2e-object-recovery.md) · [v0.7.1](./plans/v0.7.1/e2e-three-layer.md) · [v0.7.3](./plans/v0.7.3/e2e-libsql.md)）· Actions（[v0.7.2](./plans/v0.7.2/github-actions.md)）、Phase 7: [v0.8.0](./plans/v0.8.0/)（[redis-valkey-state](./plans/v0.8.0/redis-valkey-state.md) · [firestore-state](./plans/v0.8.0/firestore-state.md)。両 Backend 共存）。
+
+Phase 10（[v0.11.0](./plans/v0.11.0/)）は期限付き書き込みの方針確定段階。PO 決定は [plan.md](./plans/v0.11.0/plan.md#po-決定要決定クローズ2026-10-28-15141518-jst)。
 
 関連: [pillar](./README.md) · [plans 索引](./plans/README.md) · [open-questions](./plans/open-questions.md)
 
