@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { ErrNotFound, isEs4Error } from "../src/errors.js";
 import { DB } from "../src/db.js";
+import { defaults } from "../src/options/index.js";
 import {
   newMemory,
   openSQLite,
@@ -109,7 +110,7 @@ describe("expiresAt contract", () => {
 
 describe("DB.set { expiresAt }", () => {
   it("public options and AbortSignal compat", async () => {
-    const db = await DB.open({ memory_only: true });
+    const db = await DB.open({ ...defaults(), memory_only: true });
     try {
       const fixed = new Date("2032-03-01T10:00:00.000Z");
       setNowFunc(() => new Date(fixed));
@@ -128,7 +129,7 @@ describe("DB.set { expiresAt }", () => {
 
 describe("HTTP expires_at", () => {
   it("query sets expiry; invalid → 400 invalid_expiry; past → 404", async () => {
-    const db = await DB.open({ memory_only: true });
+    const db = await DB.open({ ...defaults(), memory_only: true });
     const srv = newServer(db);
     const httpSrv = createServer(srv.handler());
     await new Promise<void>((resolve) => httpSrv.listen(0, "127.0.0.1", resolve));
