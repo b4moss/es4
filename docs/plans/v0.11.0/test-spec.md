@@ -4,15 +4,15 @@ title: v0.11.0 期限付き書き込み — テスト仕様
 description: 実装前の TDD 入力。正本の振る舞いは実装後に docs/tests/state へ昇格する。
 tags: [tests, plan, v0.11.0, ttl, expires_at]
 timestamp: 2026-10-28
-status: draft
+status: decided
 role: test-spec-for-plan
 ---
 
 # v0.11.0 — 期限付き書き込み テスト仕様
 
-計画: [plan.md](./plan.md)。実装後の昇格先: [`docs/tests/state/api.md`](../../tests/state/api.md) · [`docs/tests/tx/api.md`](../../tests/tx/api.md)（および Server を含める場合は es4-server）。
+計画: [plan.md](./plan.md)。実装後の昇格先: [`docs/tests/state/api.md`](../../tests/state/api.md) · [`docs/tests/tx/api.md`](../../tests/tx/api.md) · [`docs/tests/es4-server/`](../../tests/es4-server/)。
 
-前提（決定済み）: Firestore は日時型 `expires_at`、期限なしは省略、読取時期限切れ＝不在。API 形は plan **推奨案 A**（`Set` options）で書く。PO が B を選んだ場合はメソッド名だけ読み替える。
+前提（PO 決定 2026-10-28）: Firestore は日時型 `expires_at`、期限なしは省略、読取時期限切れ＝不在。API は **Q1-A**（Go `WithExpiresAt` / Node `{ expiresAt }`）。過去時刻 Set は **Q2-A**。Export は値のみ（**Q3-C**）。HTTP はクエリ（**Q4-A**）。Redis は読取フィルタ（**Q5-A**）。
 
 実装: `packages/go/internal/state`（契約テーブル ＋ Firestore Emulator）と公開 `packages/go/pkg/es4`。Node 同セマンティクス。
 
@@ -42,8 +42,7 @@ role: test-spec-for-plan
 
 #### 異常系 / 境界
 
-- 過去の `ExpiresAt`（plan Q2 推奨 A）: Set は成功、直後の Get は `ErrNotFound`、Exists は false
-- （Q2 が B の場合）過去時刻 → `ErrInvalidExpiry`（名前は実装で固定）
+- 過去の `ExpiresAt`（**Q2-A**）: Set は成功、直後の Get は `ErrNotFound`、Exists は false、Scan に含まれない
 
 ----
 
@@ -86,7 +85,7 @@ role: test-spec-for-plan
 - 期限切れ後 Get 不在
 - 期限なし上書きで「期限付き→無期限」に戻せる
 - Clear 後は期限付きキーも消える
-- Export（Q3 推奨 A）: 値は含まれる。**期限メタの有無は現行 map 形式では表に出ない**ことを固定（または「期限は Export されない」を assert）
+- Export（**Q3-C**）: 値は含まれる。**期限メタは Export されない**ことを assert。文書（specs／README）に Recovery 非対応を明記する受け入れは実装 PR の docs チェックで確認
 
 ----
 
@@ -117,20 +116,18 @@ role: test-spec-for-plan
 
 ----
 
-## 8. HTTP Server（Q4 が A のとき）
+## 8. HTTP Server（Q4-A・必須）
 
 - `PUT /v1/keys/{key}?expires_at=<RFC3339>` → 期限付き Set 相当
 - クエリ省略 → 無期限
 - 不正な日時文字列 → **400**
-- 期限切れ後 `GET` → **404**
-
-（Q4 が C なら本節は後続版へ延期）
+- 期限切れ後（および過去時刻で Set した直後）`GET` → **404**
 
 ----
 
 ## 9. パリティ
 
-- Go / Node で同一フィクスチャ（キー・時刻・JSON）の期待を共有できること
+- Go / Node で同一フィクスチャ（キー・時刻・JSON）の期待を共有できること（`WithExpiresAt` ↔ `{ expiresAt }`）
 - Firestore Doc ID 写像（`:` → `%3A`）は v0.10.0 のまま回帰しないこと
 
 ----
@@ -138,8 +135,8 @@ role: test-spec-for-plan
 ## 10. 意図的にテストしない（第一版）
 
 - 本番 GCP 上での TTL ポリシーによる物理削除の完了待ち（Emulator は TTL ポリシー非再現の想定 → **読取フィルタで契約を担保**）
-- ss-cachian / jparse 結合（下流リポ）
-- Redis ネイティブ EXPIRE（Q5 が A の場合）
+- ss-cachian / jparse 結合（下流リポ。API 形は Q1-A に合わせる）
+- Redis ネイティブ EXPIRE（**Q5-A** により第一版対象外）
 
 ----
 
