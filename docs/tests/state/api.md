@@ -149,3 +149,13 @@
 ----
 
 以上
+
+### ExpiresAt（v0.11.0）
+
+計画正本: [`docs/plans/v0.11.0/test-spec.md`](../../plans/v0.11.0/test-spec.md)。
+
+- `Set(..., WithExpiresAt(future))` / `{ expiresAt }` → 期限前 Get 成功
+- 過去時刻 Set は成功、直後 Get は `ErrNotFound`、Exists false、Scan 除外
+- 期限なし上書きで期限メタ除去（Firestore は `expires_at` フィールド欠落）
+- Export は値のみ（期限メタなし）。期限切れキーは Export 除外
+- Memory / SQLite / Redis（miniredis）契約＋ Firestore Emulator 行列

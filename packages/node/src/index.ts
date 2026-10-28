@@ -38,7 +38,13 @@ export {
   isFirestoreStateBackend,
 } from "./options/index.js";
 
-export type { Store, Tx, JsonRaw } from "./state/index.js";
+export type {
+  Store,
+  Tx,
+  JsonRaw,
+  SetOptions,
+  SetMeta,
+} from "./state/index.js";
 export {
   newMemory,
   openSQLite,
@@ -48,8 +54,16 @@ export {
   validateValue,
   encodeFirestoreDocID,
   decodeFirestoreDocID,
+  isExpired,
+  now,
+  setNowFunc,
 } from "./state/index.js";
 
 export { DB, open, openWith, type OpenConfig } from "./db.js";
 
-export { newServer, Es4Server, resolveListenAddr } from "./server/server.js";
+export {
+  newServer,
+  Es4Server,
+  resolveListenAddr,
+  CodeInvalidExpiry,
+} from "./server/server.js";

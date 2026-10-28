@@ -7,9 +7,12 @@ import {
 } from "../errors.js";
 import {
   deepCopyRaw,
+  isExpired,
   keysWithPrefix,
+  metaExpiresAt,
   type JsonRaw,
   type OverlayEntry,
+  type SetMeta,
   type Store,
   type Tx,
   toEntriesMap,
@@ -18,33 +21,52 @@ import {
   validateValue,
 } from "./types.js";
 
+type MemEntry = { value: JsonRaw; expiresAt: Date | null };
+
 export class MemoryStore implements Store {
-  private entries = new Map<string, JsonRaw>();
+  private entries = new Map<string, MemEntry>();
   private closed = false;
   private active: MemoryTx | null = null;
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
     if (this.closed) throw ErrClosed;
-    this.entries.set(key, deepCopyRaw(value));
+    this.entries.set(key, {
+      value: deepCopyRaw(value),
+      expiresAt: metaExpiresAt(meta),
+    });
   }
 
   async get(key: string, signal?: AbortSignal): Promise<JsonRaw> {
     throwIfAborted(signal);
     validateKey(key);
     if (this.closed) throw ErrClosed;
-    const v = this.entries.get(key);
-    if (v === undefined) throw ErrNotFound;
-    return deepCopyRaw(v);
+    const e = this.entries.get(key);
+    if (e === undefined) throw ErrNotFound;
+    if (isExpired(e.expiresAt)) {
+      this.entries.delete(key);
+      throw ErrNotFound;
+    }
+    return deepCopyRaw(e.value);
   }
 
   async delete(key: string, signal?: AbortSignal): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     if (this.closed) throw ErrClosed;
-    if (!this.entries.has(key)) throw ErrNotFound;
+    const e = this.entries.get(key);
+    if (e === undefined) throw ErrNotFound;
+    if (isExpired(e.expiresAt)) {
+      this.entries.delete(key);
+      throw ErrNotFound;
+    }
     this.entries.delete(key);
   }
 
@@ -52,7 +74,13 @@ export class MemoryStore implements Store {
     throwIfAborted(signal);
     validateKey(key);
     if (this.closed) throw ErrClosed;
-    return this.entries.has(key);
+    const e = this.entries.get(key);
+    if (e === undefined) return false;
+    if (isExpired(e.expiresAt)) {
+      this.entries.delete(key);
+      return false;
+    }
+    return true;
   }
 
   async clear(signal?: AbortSignal): Promise<void> {
@@ -65,14 +93,23 @@ export class MemoryStore implements Store {
     throwIfAborted(signal);
     validateScanPrefix(prefix);
     if (this.closed) throw ErrClosed;
-    return keysWithPrefix(this.entries.keys(), prefix);
+    const live: string[] = [];
+    for (const [k, e] of this.entries) {
+      if (prefix !== "" && !k.startsWith(prefix)) continue;
+      if (isExpired(e.expiresAt)) continue;
+      live.push(k);
+    }
+    return live;
   }
 
   async export(signal?: AbortSignal): Promise<Map<string, JsonRaw>> {
     throwIfAborted(signal);
     if (this.closed) throw ErrClosed;
     const out = new Map<string, JsonRaw>();
-    for (const [k, v] of this.entries) out.set(k, deepCopyRaw(v));
+    for (const [k, e] of this.entries) {
+      if (isExpired(e.expiresAt)) continue;
+      out.set(k, deepCopyRaw(e.value));
+    }
     return out;
   }
 
@@ -81,11 +118,11 @@ export class MemoryStore implements Store {
     signal?: AbortSignal,
   ): Promise<void> {
     throwIfAborted(signal);
-    const next = new Map<string, JsonRaw>();
+    const next = new Map<string, MemEntry>();
     for (const [k, v] of toEntriesMap(entries)) {
       validateKey(k);
       validateValue(v);
-      next.set(k, deepCopyRaw(v));
+      next.set(k, { value: deepCopyRaw(v), expiresAt: null });
     }
     if (this.closed) throw ErrClosed;
     this.entries = next;
@@ -110,11 +147,11 @@ export class MemoryStore implements Store {
   }
 
   /** @internal */
-  _entries(): Map<string, JsonRaw> {
+  _entries(): Map<string, MemEntry> {
     return this.entries;
   }
   /** @internal */
-  _setEntries(m: Map<string, JsonRaw>): void {
+  _setEntries(m: Map<string, MemEntry>): void {
     this.entries = m;
   }
   /** @internal */
@@ -147,12 +184,20 @@ class MemoryTx implements Tx {
     if (this.m._isClosed()) throw ErrClosed;
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
     this.guard();
-    this.overlay.set(key, { value: deepCopyRaw(value) });
+    this.overlay.set(key, {
+      value: deepCopyRaw(value),
+      expiresAt: metaExpiresAt(meta),
+    });
   }
 
   async get(key: string, signal?: AbortSignal): Promise<JsonRaw> {
@@ -161,13 +206,13 @@ class MemoryTx implements Tx {
     this.guard();
     const e = this.overlay.get(key);
     if (e) {
-      if (e.deleted) throw ErrNotFound;
+      if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
       return deepCopyRaw(e.value);
     }
     if (this.cleared) throw ErrNotFound;
-    const v = this.m._entries().get(key);
-    if (v === undefined) throw ErrNotFound;
-    return deepCopyRaw(v);
+    const base = this.m._entries().get(key);
+    if (base === undefined || isExpired(base.expiresAt)) throw ErrNotFound;
+    return deepCopyRaw(base.value);
   }
 
   async delete(key: string, signal?: AbortSignal): Promise<void> {
@@ -176,12 +221,13 @@ class MemoryTx implements Tx {
     this.guard();
     const e = this.overlay.get(key);
     if (e) {
-      if (e.deleted) throw ErrNotFound;
+      if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
       this.overlay.set(key, { deleted: true });
       return;
     }
     if (this.cleared) throw ErrNotFound;
-    if (!this.m._entries().has(key)) throw ErrNotFound;
+    const base = this.m._entries().get(key);
+    if (base === undefined || isExpired(base.expiresAt)) throw ErrNotFound;
     this.overlay.set(key, { deleted: true });
   }
 
@@ -190,9 +236,10 @@ class MemoryTx implements Tx {
     validateKey(key);
     this.guard();
     const e = this.overlay.get(key);
-    if (e) return !e.deleted;
+    if (e) return !e.deleted && !isExpired(e.expiresAt);
     if (this.cleared) return false;
-    return this.m._entries().has(key);
+    const base = this.m._entries().get(key);
+    return base !== undefined && !isExpired(base.expiresAt);
   }
 
   async clear(signal?: AbortSignal): Promise<void> {
@@ -208,15 +255,20 @@ class MemoryTx implements Tx {
     this.guard();
     const seen = new Set<string>();
     if (!this.cleared) {
-      for (const k of this.m._entries().keys()) {
+      for (const [k, base] of this.m._entries()) {
         if (prefix !== "" && !k.startsWith(prefix)) continue;
         const e = this.overlay.get(k);
-        if (e?.deleted) continue;
+        if (e) {
+          if (e.deleted || isExpired(e.expiresAt)) continue;
+          seen.add(k);
+          continue;
+        }
+        if (isExpired(base.expiresAt)) continue;
         seen.add(k);
       }
     }
     for (const [k, e] of this.overlay) {
-      if (e.deleted) continue;
+      if (e.deleted || isExpired(e.expiresAt)) continue;
       if (prefix !== "" && !k.startsWith(prefix)) continue;
       seen.add(k);
     }
@@ -229,7 +281,12 @@ class MemoryTx implements Tx {
     const entries = this.m._entries();
     for (const [k, e] of this.overlay) {
       if (e.deleted) entries.delete(k);
-      else entries.set(k, deepCopyRaw(e.value));
+      else {
+        entries.set(k, {
+          value: deepCopyRaw(e.value),
+          expiresAt: e.expiresAt ?? null,
+        });
+      }
     }
     this.done = true;
     this.m._clearActive(this);

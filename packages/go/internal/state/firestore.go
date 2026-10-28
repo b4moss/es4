@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"cloud.google.com/go/firestore"
@@ -26,8 +27,18 @@ var ErrFirestoreDocIDTooLong = errors.New("state: firestore document id too long
 
 // firestoreDoc is the document schema stored in the configured collection.
 // Field "value" holds JSON text reconstitutable to json.RawMessage semantics.
+// expires_at is a Timestamp when set; omitted (not written) when there is no expiry.
 type firestoreDoc struct {
-	Value string `firestore:"value"`
+	Value     string     `firestore:"value"`
+	ExpiresAt *time.Time `firestore:"expires_at,omitempty"`
+}
+
+func firestoreDocFrom(value string, exp *time.Time) firestoreDoc {
+	return firestoreDoc{Value: value, ExpiresAt: CloneTimePtr(exp)}
+}
+
+func (d firestoreDoc) expired() bool {
+	return IsExpired(d.ExpiresAt)
 }
 
 // Firestore is a Firestore State adapter.
@@ -164,7 +175,7 @@ func (f *Firestore) waitNoActiveTxLocked() {
 	}
 }
 
-func (f *Firestore) Set(ctx context.Context, key string, value json.RawMessage) error {
+func (f *Firestore) Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -179,6 +190,7 @@ func (f *Firestore) Set(ctx context.Context, key string, value json.RawMessage) 
 		return err
 	}
 	cp := append(json.RawMessage(nil), value...)
+	exp := CloneTimePtr(FirstMeta(meta).ExpiresAt)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -189,7 +201,8 @@ func (f *Firestore) Set(ctx context.Context, key string, value json.RawMessage) 
 	if f.closed {
 		return ErrClosed
 	}
-	_, err = f.coll().Doc(docID).Set(ctx, firestoreDoc{Value: string(cp)})
+	// Full document Set: when exp is nil, expires_at is omitted (not zero-valued).
+	_, err = f.coll().Doc(docID).Set(ctx, firestoreDocFrom(string(cp), exp))
 	if err != nil {
 		return fmt.Errorf("state: firestore set: %w", err)
 	}
@@ -228,6 +241,9 @@ func (f *Firestore) Get(ctx context.Context, key string) (json.RawMessage, error
 	if err := snap.DataTo(&doc); err != nil {
 		return nil, fmt.Errorf("state: firestore get decode: %w", err)
 	}
+	if doc.expired() {
+		return nil, ErrNotFound
+	}
 	return append(json.RawMessage(nil), doc.Value...), nil
 }
 
@@ -252,13 +268,20 @@ func (f *Firestore) Delete(ctx context.Context, key string) error {
 	if f.closed {
 		return ErrClosed
 	}
-	// Exists check so missing keys return ErrNotFound (Firestore Delete is idempotent).
-	_, err = f.coll().Doc(docID).Get(ctx)
+	// Exists check so missing/expired keys return ErrNotFound (Firestore Delete is idempotent).
+	snap, err := f.coll().Doc(docID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return ErrNotFound
 		}
 		return fmt.Errorf("state: firestore delete get: %w", err)
+	}
+	var delDoc firestoreDoc
+	if err := snap.DataTo(&delDoc); err != nil {
+		return fmt.Errorf("state: firestore delete decode: %w", err)
+	}
+	if delDoc.expired() {
+		return ErrNotFound
 	}
 	_, err = f.coll().Doc(docID).Delete(ctx)
 	if err != nil {
@@ -288,12 +311,19 @@ func (f *Firestore) Exists(ctx context.Context, key string) (bool, error) {
 	if f.closed {
 		return false, ErrClosed
 	}
-	_, err = f.coll().Doc(docID).Get(ctx)
+	snap, err := f.coll().Doc(docID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return false, nil
 		}
 		return false, fmt.Errorf("state: firestore exists: %w", err)
+	}
+	var doc firestoreDoc
+	if err := snap.DataTo(&doc); err != nil {
+		return false, fmt.Errorf("state: firestore exists decode: %w", err)
+	}
+	if doc.expired() {
+		return false, nil
 	}
 	return true, nil
 }
@@ -350,9 +380,17 @@ func (f *Firestore) Scan(ctx context.Context, prefix string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if strings.HasPrefix(logical, prefix) {
-			out = append(out, logical)
+		if !strings.HasPrefix(logical, prefix) {
+			continue
 		}
+		var doc firestoreDoc
+		if err := snap.DataTo(&doc); err != nil {
+			return nil, fmt.Errorf("state: firestore scan decode: %w", err)
+		}
+		if doc.expired() {
+			continue
+		}
+		out = append(out, logical)
 	}
 	return out, nil
 }
@@ -413,6 +451,9 @@ func (f *Firestore) Export(ctx context.Context) (map[string]json.RawMessage, err
 		if err := snap.DataTo(&doc); err != nil {
 			return nil, fmt.Errorf("state: firestore export decode: %w", err)
 		}
+		if doc.expired() {
+			continue
+		}
 		out[logical] = append(json.RawMessage(nil), doc.Value...)
 	}
 	return out, nil
@@ -455,7 +496,7 @@ func (f *Firestore) Replace(ctx context.Context, entries map[string]json.RawMess
 	bw := f.client.BulkWriter(ctx)
 	for docID, val := range next {
 		ref := f.coll().Doc(docID)
-		if _, err := bw.Set(ref, firestoreDoc{Value: val}); err != nil {
+		if _, err := bw.Set(ref, firestoreDocFrom(val, nil)); err != nil {
 			bw.End()
 			return fmt.Errorf("state: firestore replace set: %w", err)
 		}
@@ -541,6 +582,9 @@ func (t *firestoreTx) baseGet(ctx context.Context, key string) (json.RawMessage,
 	if err := snap.DataTo(&doc); err != nil {
 		return nil, fmt.Errorf("state: firestore tx get decode: %w", err)
 	}
+	if doc.expired() {
+		return nil, ErrNotFound
+	}
 	return append(json.RawMessage(nil), doc.Value...), nil
 }
 
@@ -549,17 +593,24 @@ func (t *firestoreTx) baseExists(ctx context.Context, key string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	_, err = t.f.coll().Doc(docID).Get(ctx)
+	snap, err := t.f.coll().Doc(docID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return false, nil
 		}
 		return false, fmt.Errorf("state: firestore tx exists: %w", err)
 	}
+	var doc firestoreDoc
+	if err := snap.DataTo(&doc); err != nil {
+		return false, fmt.Errorf("state: firestore tx exists decode: %w", err)
+	}
+	if doc.expired() {
+		return false, nil
+	}
 	return true, nil
 }
 
-func (t *firestoreTx) Set(ctx context.Context, key string, value json.RawMessage) error {
+func (t *firestoreTx) Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error {
 	if err := ValidateKey(key); err != nil {
 		return err
 	}
@@ -570,8 +621,9 @@ func (t *firestoreTx) Set(ctx context.Context, key string, value json.RawMessage
 		return err
 	}
 	cp := append(json.RawMessage(nil), value...)
+	exp := CloneTimePtr(FirstMeta(meta).ExpiresAt)
 	return t.withLock(ctx, func() error {
-		t.overlay[key] = overlayEntry{value: cp}
+		t.overlay[key] = overlayEntry{value: cp, expiresAt: exp}
 		return nil
 	})
 }
@@ -583,7 +635,7 @@ func (t *firestoreTx) Get(ctx context.Context, key string) (json.RawMessage, err
 	var out json.RawMessage
 	err := t.withLock(ctx, func() error {
 		if e, ok := t.overlay[key]; ok {
-			if e.deleted {
+			if e.deleted || IsExpired(e.expiresAt) {
 				return ErrNotFound
 			}
 			out = append(json.RawMessage(nil), e.value...)
@@ -608,7 +660,7 @@ func (t *firestoreTx) Delete(ctx context.Context, key string) error {
 	}
 	return t.withLock(ctx, func() error {
 		if e, ok := t.overlay[key]; ok {
-			if e.deleted {
+			if e.deleted || IsExpired(e.expiresAt) {
 				return ErrNotFound
 			}
 			t.overlay[key] = overlayEntry{deleted: true}
@@ -636,7 +688,7 @@ func (t *firestoreTx) Exists(ctx context.Context, key string) (bool, error) {
 	var ok bool
 	err := t.withLock(ctx, func() error {
 		if e, hit := t.overlay[key]; hit {
-			ok = !e.deleted
+			ok = !e.deleted && !IsExpired(e.expiresAt)
 			return nil
 		}
 		if t.cleared {
@@ -683,14 +735,25 @@ func (t *firestoreTx) Scan(ctx context.Context, prefix string) ([]string, error)
 				if !strings.HasPrefix(logical, prefix) {
 					continue
 				}
-				if e, ok := t.overlay[logical]; ok && e.deleted {
+				if e, ok := t.overlay[logical]; ok {
+					if e.deleted || IsExpired(e.expiresAt) {
+						continue
+					}
+					seen[logical] = struct{}{}
+					continue
+				}
+				var doc firestoreDoc
+				if err := snap.DataTo(&doc); err != nil {
+					return fmt.Errorf("state: firestore tx scan decode: %w", err)
+				}
+				if doc.expired() {
 					continue
 				}
 				seen[logical] = struct{}{}
 			}
 		}
 		for k, e := range t.overlay {
-			if e.deleted || !strings.HasPrefix(k, prefix) {
+			if e.deleted || IsExpired(e.expiresAt) || !strings.HasPrefix(k, prefix) {
 				continue
 			}
 			seen[k] = struct{}{}
@@ -734,7 +797,7 @@ func (t *firestoreTx) Commit() error {
 			}
 			continue
 		}
-		if _, err := bw.Set(ref, firestoreDoc{Value: string(e.value)}); err != nil {
+		if _, err := bw.Set(ref, firestoreDocFrom(string(e.value), e.expiresAt)); err != nil {
 			bw.End()
 			return fmt.Errorf("state: firestore tx commit set: %w", err)
 		}

@@ -13,7 +13,7 @@ Embedded server-side state store with pluggable Recovery — for when you want d
 
 Product knowledge lives under **[`docs/`](./docs/)** (OKF). This root README is the canonical English entry for install and usage; deeper specs and plans stay in `docs/`.
 
-Current monorepo line: **Git tag `v0.10.0`** (Go `packages/go` + Node `@b4moss/es4` stay in lockstep). **BREAKING** vs v0.9.0: key hierarchy delimiter `/` → `:` and `Scan(prefix)`.
+Current monorepo line: **v0.11.0** (expires_at writes; prior release `v0.10.0`). Go `packages/go` + Node `@b4moss/es4` stay in lockstep. **BREAKING** vs v0.9.0: key hierarchy delimiter `/` → `:` and `Scan(prefix)`.
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Current monorepo line: **Git tag `v0.10.0`** (Go `packages/go` + Node `@b4moss/e
 
 ## Scope
 
-**In scope (Go + Node at `v0.10.0`):**
+**In scope (Go + Node at `v0.11.0`):**
 
 | Layer | Choices |
 |-------|---------|
@@ -51,10 +51,10 @@ Module path (current, until a rename is approved):
 github.com/b4moss/es4/packages/go
 ```
 
-Go module tag: `packages/go/v0.10.0` (see `packages/go/VERSION`).
+Go module tag (after release): `packages/go/v0.11.0` (see `packages/go/VERSION`).
 
 ```bash
-go get github.com/b4moss/es4/packages/go@v0.10.0
+go get github.com/b4moss/es4/packages/go@v0.11.0
 ```
 
 Import:
@@ -149,7 +149,9 @@ db, err := es4.Open(ctx, options.Options{
 })
 ```
 
-Keys are hierarchical strings separated by `/` (no leading/trailing `/`, no `//`). Values are arbitrary JSON documents (`json.RawMessage`). Missing keys: `Get`/`Delete` → `es4.ErrNotFound`; `Exists` → `false, nil`.
+Keys are hierarchical strings separated by `:` (no leading/trailing `:`, no `::`; `/` is an ordinary character). Values are arbitrary JSON documents (`json.RawMessage`). Missing keys: `Get`/`Delete` → `es4.ErrNotFound`; `Exists` → `false, nil`.
+
+Optional absolute expiry on Set (v0.11.0): `db.Set(ctx, key, value, es4.WithExpiresAt(t))` (Node: `set(key, value, { expiresAt })`). Past `ExpiresAt` still stores successfully but reads treat the key as absent. Firestore writes a Timestamp field `expires_at` only when set (omit when unlimited — for TTL policies). Export / Recovery carry **values only** (no expiry metadata). Redis/Valkey use read-time filtering only (no native per-field EXPIRE).
 
 Transactions (separate Tx surface):
 

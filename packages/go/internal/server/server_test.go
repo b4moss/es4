@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/b4moss/es4/packages/go/internal/recovery"
+	"github.com/b4moss/es4/packages/go/internal/state"
 	"github.com/b4moss/es4/packages/go/pkg/es4"
 	"github.com/b4moss/es4/packages/go/pkg/options"
 )
@@ -697,5 +698,54 @@ func TestDB_Ready_ImmediateWithoutRestore(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	if !db.Ready() {
 		t.Fatal("restore_on_startup=false should be Ready immediately")
+	}
+}
+
+func TestState_ExpiresAt_Query(t *testing.T) {
+	s, _ := newReadyServer(t)
+	h := s.Handler()
+	fixed := time.Date(2033, 4, 1, 0, 0, 0, 0, time.UTC)
+	state.SetNowFunc(func() time.Time { return fixed })
+	t.Cleanup(func() { state.SetNowFunc(nil) })
+
+	future := fixed.Add(time.Hour).UTC().Format(time.RFC3339)
+	past := fixed.Add(-time.Hour).UTC().Format(time.RFC3339)
+
+	put := doReq(t, h, http.MethodPut, "/v1/keys/exp?expires_at="+future, []byte(`{"e":1}`))
+	put.Body.Close()
+	if put.StatusCode != http.StatusOK {
+		t.Fatalf("PUT future status=%d", put.StatusCode)
+	}
+	get := doReq(t, h, http.MethodGet, "/v1/keys/exp", nil)
+	body, _ := io.ReadAll(get.Body)
+	get.Body.Close()
+	if get.StatusCode != http.StatusOK || string(body) != `{"e":1}` {
+		t.Fatalf("GET future status=%d body=%s", get.StatusCode, body)
+	}
+
+	putPast := doReq(t, h, http.MethodPut, "/v1/keys/past?expires_at="+past, []byte(`{"e":2}`))
+	putPast.Body.Close()
+	if putPast.StatusCode != http.StatusOK {
+		t.Fatalf("PUT past status=%d", putPast.StatusCode)
+	}
+	getPast := doReq(t, h, http.MethodGet, "/v1/keys/past", nil)
+	if getPast.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET past status=%d", getPast.StatusCode)
+	}
+	getPast.Body.Close()
+
+	bad := doReq(t, h, http.MethodPut, "/v1/keys/bad?expires_at=not-a-date", []byte(`1`))
+	if bad.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad expiry status=%d", bad.StatusCode)
+	}
+	if code := readErrCode(t, bad); code != CodeInvalidExpiry {
+		t.Fatalf("code=%s", code)
+	}
+
+	// Omit query → no expiry.
+	putPlain := doReq(t, h, http.MethodPut, "/v1/keys/plain", []byte(`{"p":1}`))
+	putPlain.Body.Close()
+	if putPlain.StatusCode != http.StatusOK {
+		t.Fatalf("PUT plain status=%d", putPlain.StatusCode)
 	}
 }

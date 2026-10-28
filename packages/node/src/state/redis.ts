@@ -11,9 +11,13 @@ import { DEFAULT_REDIS_HASH_KEY } from "../options/types.js";
 import { AsyncMutex } from "./mutex.js";
 import {
   deepCopyRaw,
-  keysWithPrefix,
+  formatExpiresAt,
+  isExpired,
+  metaExpiresAt,
+  parseExpiresAt,
   type JsonRaw,
   type OverlayEntry,
+  type SetMeta,
   type Store,
   type Tx,
   toEntriesMap,
@@ -92,6 +96,11 @@ export class RedisStore implements Store {
     return this.hash;
   }
 
+  /** Companion HASH for expiry metadata (read-time filter; no native EXPIRE). */
+  metaHash(): string {
+    return `${this.hash}:meta`;
+  }
+
   private async withNoTx<T>(fn: () => Promise<T>): Promise<T> {
     let release = await this.mu.acquire();
     try {
@@ -108,12 +117,35 @@ export class RedisStore implements Store {
     }
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  private async readExpires(key: string): Promise<Date | null> {
+    const s = await this.client.hget(this.metaHash(), key);
+    if (s === null || s === "") return null;
+    return parseExpiresAt(s);
+  }
+
+  private async purgeExpired(key: string): Promise<void> {
+    const multi = this.client.multi();
+    multi.hdel(this.hash, key);
+    multi.hdel(this.metaHash(), key);
+    await multi.exec();
+  }
+
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
+    const exp = metaExpiresAt(meta);
     await this.withNoTx(async () => {
-      await this.client.hset(this.hash, key, value);
+      const multi = this.client.multi();
+      multi.hset(this.hash, key, value);
+      if (exp === null) multi.hdel(this.metaHash(), key);
+      else multi.hset(this.metaHash(), key, formatExpiresAt(exp));
+      await multi.exec();
     });
   }
 
@@ -123,6 +155,11 @@ export class RedisStore implements Store {
     return await this.withNoTx(async () => {
       const v = await this.client.hget(this.hash, key);
       if (v === null) throw ErrNotFound;
+      const exp = await this.readExpires(key);
+      if (isExpired(exp)) {
+        await this.purgeExpired(key);
+        throw ErrNotFound;
+      }
       return deepCopyRaw(v);
     });
   }
@@ -131,8 +168,17 @@ export class RedisStore implements Store {
     throwIfAborted(signal);
     validateKey(key);
     await this.withNoTx(async () => {
-      const n = await this.client.hdel(this.hash, key);
+      const n = await this.client.hexists(this.hash, key);
       if (n === 0) throw ErrNotFound;
+      const exp = await this.readExpires(key);
+      if (isExpired(exp)) {
+        await this.purgeExpired(key);
+        throw ErrNotFound;
+      }
+      const multi = this.client.multi();
+      multi.hdel(this.hash, key);
+      multi.hdel(this.metaHash(), key);
+      await multi.exec();
     });
   }
 
@@ -141,14 +187,20 @@ export class RedisStore implements Store {
     validateKey(key);
     return await this.withNoTx(async () => {
       const n = await this.client.hexists(this.hash, key);
-      return n === 1;
+      if (n === 0) return false;
+      const exp = await this.readExpires(key);
+      if (isExpired(exp)) {
+        await this.purgeExpired(key);
+        return false;
+      }
+      return true;
     });
   }
 
   async clear(signal?: AbortSignal): Promise<void> {
     throwIfAborted(signal);
     await this.withNoTx(async () => {
-      await this.client.del(this.hash);
+      await this.client.del(this.hash, this.metaHash());
     });
   }
 
@@ -157,16 +209,40 @@ export class RedisStore implements Store {
     validateScanPrefix(prefix);
     return await this.withNoTx(async () => {
       const fields = await this.client.hkeys(this.hash);
-      return keysWithPrefix(fields, prefix);
+      const meta = (await this.client.hgetall(this.metaHash())) as Record<
+        string,
+        string
+      >;
+      const out: string[] = [];
+      for (const k of fields) {
+        if (prefix !== "" && !k.startsWith(prefix)) continue;
+        const raw = meta[k];
+        const exp = raw ? parseExpiresAt(raw) : null;
+        if (isExpired(exp)) continue;
+        out.push(k);
+      }
+      return out;
     });
   }
 
   async export(signal?: AbortSignal): Promise<Map<string, JsonRaw>> {
     throwIfAborted(signal);
     return await this.withNoTx(async () => {
-      const all = (await this.client.hgetall(this.hash)) as Record<string, string>;
+      const all = (await this.client.hgetall(this.hash)) as Record<
+        string,
+        string
+      >;
+      const meta = (await this.client.hgetall(this.metaHash())) as Record<
+        string,
+        string
+      >;
       const out = new Map<string, JsonRaw>();
-      for (const [k, v] of Object.entries(all)) out.set(k, deepCopyRaw(v));
+      for (const [k, v] of Object.entries(all)) {
+        const raw = meta[k];
+        const exp = raw ? parseExpiresAt(raw) : null;
+        if (isExpired(exp)) continue;
+        out.set(k, deepCopyRaw(v));
+      }
       return out;
     });
   }
@@ -183,7 +259,7 @@ export class RedisStore implements Store {
     }
     await this.withNoTx(async () => {
       const multi = this.client.multi();
-      multi.del(this.hash);
+      multi.del(this.hash, this.metaHash());
       if (map.size > 0) {
         const flat: string[] = [];
         for (const [k, v] of map) {
@@ -245,6 +321,10 @@ export class RedisStore implements Store {
   _mu(): AsyncMutex {
     return this.mu;
   }
+  /** @internal */
+  async _readExpires(key: string): Promise<Date | null> {
+    return this.readExpires(key);
+  }
 }
 
 class RedisOverlayTx implements Tx {
@@ -263,13 +343,21 @@ class RedisOverlayTx implements Tx {
     if (this.r._isClosed()) throw ErrClosed;
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
     await this.r._mu().withLock(() => {
       this.guard();
-      this.overlay.set(key, { value: deepCopyRaw(value) });
+      this.overlay.set(key, {
+        value: deepCopyRaw(value),
+        expiresAt: metaExpiresAt(meta),
+      });
     });
   }
 
@@ -280,12 +368,14 @@ class RedisOverlayTx implements Tx {
       this.guard();
       const e = this.overlay.get(key);
       if (e) {
-        if (e.deleted) throw ErrNotFound;
+        if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
         return deepCopyRaw(e.value);
       }
       if (this.cleared) throw ErrNotFound;
       const v = await this.r._client().hget(this.r.hash, key);
       if (v === null) throw ErrNotFound;
+      const exp = await this.r._readExpires(key);
+      if (isExpired(exp)) throw ErrNotFound;
       return deepCopyRaw(v);
     });
   }
@@ -297,13 +387,15 @@ class RedisOverlayTx implements Tx {
       this.guard();
       const e = this.overlay.get(key);
       if (e) {
-        if (e.deleted) throw ErrNotFound;
+        if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
         this.overlay.set(key, { deleted: true });
         return;
       }
       if (this.cleared) throw ErrNotFound;
       const n = await this.r._client().hexists(this.r.hash, key);
       if (n === 0) throw ErrNotFound;
+      const exp = await this.r._readExpires(key);
+      if (isExpired(exp)) throw ErrNotFound;
       this.overlay.set(key, { deleted: true });
     });
   }
@@ -314,9 +406,11 @@ class RedisOverlayTx implements Tx {
     return await this.r._mu().withLock(async () => {
       this.guard();
       const e = this.overlay.get(key);
-      if (e) return !e.deleted;
+      if (e) return !e.deleted && !isExpired(e.expiresAt);
       if (this.cleared) return false;
-      return (await this.r._client().hexists(this.r.hash, key)) === 1;
+      if ((await this.r._client().hexists(this.r.hash, key)) !== 1) return false;
+      const exp = await this.r._readExpires(key);
+      return !isExpired(exp);
     });
   }
 
@@ -337,15 +431,25 @@ class RedisOverlayTx implements Tx {
       const seen = new Set<string>();
       if (!this.cleared) {
         const fields = await this.r._client().hkeys(this.r.hash);
+        const meta = (await this.r
+          ._client()
+          .hgetall(this.r.metaHash())) as Record<string, string>;
         for (const k of fields) {
           if (prefix !== "" && !k.startsWith(prefix)) continue;
           const e = this.overlay.get(k);
-          if (e?.deleted) continue;
+          if (e) {
+            if (e.deleted || isExpired(e.expiresAt)) continue;
+            seen.add(k);
+            continue;
+          }
+          const raw = meta[k];
+          const exp = raw ? parseExpiresAt(raw) : null;
+          if (isExpired(exp)) continue;
           seen.add(k);
         }
       }
       for (const [k, e] of this.overlay) {
-        if (e.deleted) continue;
+        if (e.deleted || isExpired(e.expiresAt)) continue;
         if (prefix !== "" && !k.startsWith(prefix)) continue;
         seen.add(k);
       }
@@ -357,10 +461,16 @@ class RedisOverlayTx implements Tx {
     await this.r._mu().withLock(async () => {
       this.guard();
       const multi = this.r._client().multi();
-      if (this.cleared) multi.del(this.r.hash);
+      if (this.cleared) multi.del(this.r.hash, this.r.metaHash());
       for (const [k, e] of this.overlay) {
-        if (e.deleted) multi.hdel(this.r.hash, k);
-        else multi.hset(this.r.hash, k, e.value);
+        if (e.deleted) {
+          multi.hdel(this.r.hash, k);
+          multi.hdel(this.r.metaHash(), k);
+        } else {
+          multi.hset(this.r.hash, k, e.value);
+          if (e.expiresAt == null) multi.hdel(this.r.metaHash(), k);
+          else multi.hset(this.r.metaHash(), k, formatExpiresAt(e.expiresAt));
+        }
       }
       await multi.exec();
       this.done = true;

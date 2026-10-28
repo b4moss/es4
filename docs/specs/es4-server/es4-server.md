@@ -45,7 +45,7 @@ Cloud Run 向け: **公開パスに末尾 `/` を付けない**。末尾 `/` 付
 
 | メソッド | パス | 写像 | 成功 |
 |----------|------|------|------|
-| `PUT` | `/v1/keys/{key}` | SET（body＝JSON） | **200** |
+| `PUT` | `/v1/keys/{key}` | SET（body＝JSON）。任意クエリ `expires_at`（RFC3339、UTC）で期限付き Set。省略＝無期限 | **200** |
 | `GET` | `/v1/keys/{key}` | GET | **200**＋JSON |
 | `DELETE` | `/v1/keys/{key}` | DELETE | **200** |
 | `HEAD` | `/v1/keys/{key}` | EXISTS | あり **200**／なし **404**（本文なし） |
@@ -56,6 +56,7 @@ Cloud Run 向け: **公開パスに末尾 `/` を付けない**。末尾 `/` 付
 - 空キー相当 `/v1/keys`・`/v1/keys/` → **400** `invalid_key`
 - 欠落 GET／DELETE → **404** `not_found`
 - 不正 JSON PUT → **400** `invalid_value`
+- 不正な `expires_at` → **400** `invalid_expiry`
 - `/v1/clear/` → **404**
 
 ## Tx 写像（Ready 後・別面）
@@ -82,7 +83,7 @@ State／Tx のいずれも **503** `not_ready`。`GET /livez` は **200**、`GET
 {"error":{"code":"…","message":"…"}}
 ```
 
-code: `not_found` / `invalid_key` / `invalid_value` / `conflict` / `not_ready`
+code: `not_found` / `invalid_key` / `invalid_value` / `invalid_expiry` / `conflict` / `not_ready`
 
 ## Docker / Cloud Run
 

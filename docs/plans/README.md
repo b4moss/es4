@@ -20,7 +20,7 @@
 | `v0.8.0`（暫定） | Phase 7 — 外部サービスの充実（State Backend） | **実装完了**（Git タグ `v0.8.0`） | [redis-valkey-state.md](./v0.8.0/redis-valkey-state.md) · [firestore-state.md](./v0.8.0/firestore-state.md) · [specs/state](../specs/state/) · [tests/e2e](../tests/e2e/) |
 | `v0.9.0`（暫定） | Phase 8 — Node.js／TypeScript ポート | **実装完了**（タグ + npm） | [plan.md](./v0.9.0/plan.md) · [NOTES](./v0.9.0/NOTES.md) · [specs](../specs/) |
 | `v0.10.0`（暫定） | Phase 9 — キーデリミタ `:` 化（＋ Scan） | **実装完了 → specs**（タグ + npm） | [key-delimiter.md](./v0.10.0/key-delimiter.md) · [specs/state](../specs/state/) · [specs/es4-server](../specs/es4-server/) |
-| `v0.11.0`（暫定） | Phase 10 — 期限付き書き込み（expires_at） | **方針確定**（docs のみ・要決定クローズ） | [README](./v0.11.0/README.md) · [plan.md](./v0.11.0/plan.md) · [test-spec.md](./v0.11.0/test-spec.md) · [specs-draft.md](./v0.11.0/specs-draft.md) |
+| `v0.11.0`（暫定） | Phase 10 — 期限付き書き込み（expires_at） | **実装中**（計画 #52 マージ済み・本実装 PR） | [README](./v0.11.0/README.md) · [plan.md](./v0.11.0/plan.md) · [test-spec.md](./v0.11.0/test-spec.md) · [specs/state](../specs/state/) |
 | （横断） | 未決論点 | 残件なし | [open-questions.md](./open-questions.md) · [v0.11.0 PO 決定](./v0.11.0/plan.md#po-決定要決定クローズ2026-10-28-15141518-jst) |
 
 SemVer が正式決定されるまで版号は provisional。フォルダ名・roadmap 表と同時に改名する。`v0.7.0`–`v0.7.3` の Git タグは本索引の対象外（マージ後にコーディネータが打つ）。`v0.8.0` タグも本 PR では打たない。

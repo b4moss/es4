@@ -13,7 +13,7 @@
 
 プロダクト知識は **[`docs/`](./docs/)**（OKF）にあります。このルート README はインストールと使い方の**日本語入口**です（英語版が正本）。詳細な仕様と計画は `docs/` に置きます。
 
-現行モノレポのライン: **Git タグ `v0.10.0`**（Go `packages/go` と Node `@b4moss/es4` を揃えています）。**破壊的（対 v0.9.0）:** キー階層区切り `/` → `:` および `Scan(prefix)`。
+現行モノレポのライン: **v0.11.0**（期限付き書き込み。直前リリース `v0.10.0`。Go `packages/go` と Node `@b4moss/es4` を揃えています）。**破壊的（対 v0.9.0）:** キー階層区切り `/` → `:` および `Scan(prefix)`。
 
 ## Purpose（目的）
 
@@ -24,7 +24,7 @@
 
 ## Scope（範囲）
 
-**対象内（Go + Node・`v0.10.0`）:**
+**対象内（Go + Node・`v0.11.0`）:**
 
 | Layer | Choices |
 |-------|---------|
@@ -51,10 +51,10 @@
 github.com/b4moss/es4/packages/go
 ```
 
-Go モジュールタグ: `packages/go/v0.10.0`（`packages/go/VERSION` 参照）。
+Go モジュールタグ（リリース後）: `packages/go/v0.11.0`（`packages/go/VERSION` 参照）。
 
 ```bash
-go get github.com/b4moss/es4/packages/go@v0.10.0
+go get github.com/b4moss/es4/packages/go@v0.11.0
 ```
 
 Import:
@@ -149,7 +149,9 @@ db, err := es4.Open(ctx, options.Options{
 })
 ```
 
-キーは `/` 区切りの階層文字列（先頭・末尾の `/` なし、`//` なし）。値は任意の JSON ドキュメント（`json.RawMessage`）。欠落キー: `Get`／`Delete` → `es4.ErrNotFound`、`Exists` → `false, nil`。
+キーは `:` 区切りの階層文字列（先頭・末尾の `:` なし、`::` なし。`/` は通常文字）。値は任意の JSON ドキュメント（`json.RawMessage`）。欠落キー: `Get`／`Delete` → `es4.ErrNotFound`、`Exists` → `false, nil`。
+
+任意の絶対期限（v0.11.0）: `db.Set(ctx, key, value, es4.WithExpiresAt(t))`（Node: `set(key, value, { expiresAt })`）。過去の期限でも Set は成功し、読み取りでは不在扱い。Firestore は日時型 `expires_at` を期限があるときだけ書く。Export／Recovery は値のみ（期限メタなし）。Redis／Valkey は読み取り時フィルタのみ。
 
 トランザクション（別の Tx 面）:
 

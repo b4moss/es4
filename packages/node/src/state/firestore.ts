@@ -1,4 +1,4 @@
-import { Firestore } from "@google-cloud/firestore";
+import { Firestore, Timestamp } from "@google-cloud/firestore";
 import {
   ErrClosed,
   ErrFirestoreDocIDTooLong,
@@ -12,9 +12,11 @@ import { DEFAULT_FIRESTORE_DATABASE_ID } from "../options/types.js";
 import { AsyncMutex } from "./mutex.js";
 import {
   deepCopyRaw,
-  keysWithPrefix,
+  isExpired,
+  metaExpiresAt,
   type JsonRaw,
   type OverlayEntry,
+  type SetMeta,
   type Store,
   type Tx,
   toEntriesMap,
@@ -68,6 +70,25 @@ function validateCollectionID(id: string): void {
   if (id === "." || id === "..") {
     throw new Error(`state: invalid firestore collection ${JSON.stringify(id)}`);
   }
+}
+
+/** Full doc payload: omit expires_at when no expiry so the field is removed. */
+function firestoreDocFrom(
+  value: string,
+  exp: Date | null,
+): { value: string; expires_at?: Timestamp } {
+  if (exp) return { value, expires_at: Timestamp.fromDate(exp) };
+  return { value };
+}
+
+function readExpiresAt(data: {
+  expires_at?: Timestamp | Date | null;
+}): Date | null {
+  const e = data.expires_at;
+  if (e == null) return null;
+  if (e instanceof Timestamp) return e.toDate();
+  if (e instanceof Date) return e;
+  return null;
 }
 
 export interface FirestoreConfig {
@@ -183,13 +204,19 @@ export class FirestoreStore implements Store {
     if (n > 0) await batch.commit();
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
     const docID = encodeFirestoreDocID(key);
+    const exp = metaExpiresAt(meta);
     await this.withNoTx(async () => {
-      await this.coll().doc(docID).set({ value });
+      await this.coll().doc(docID).set(firestoreDocFrom(value, exp));
     });
   }
 
@@ -200,8 +227,11 @@ export class FirestoreStore implements Store {
     return await this.withNoTx(async () => {
       const snap = await this.coll().doc(docID).get();
       if (!snap.exists) throw ErrNotFound;
-      const data = snap.data() as { value?: string } | undefined;
+      const data = snap.data() as
+        | { value?: string; expires_at?: Timestamp | Date }
+        | undefined;
       if (data?.value === undefined) throw ErrNotFound;
+      if (isExpired(readExpiresAt(data))) throw ErrNotFound;
       return deepCopyRaw(data.value);
     });
   }
@@ -214,6 +244,10 @@ export class FirestoreStore implements Store {
       const ref = this.coll().doc(docID);
       const snap = await ref.get();
       if (!snap.exists) throw ErrNotFound;
+      const data = snap.data() as
+        | { value?: string; expires_at?: Timestamp | Date }
+        | undefined;
+      if (isExpired(readExpiresAt(data ?? {}))) throw ErrNotFound;
       await ref.delete();
     });
   }
@@ -224,7 +258,12 @@ export class FirestoreStore implements Store {
     const docID = encodeFirestoreDocID(key);
     return await this.withNoTx(async () => {
       const snap = await this.coll().doc(docID).get();
-      return snap.exists;
+      if (!snap.exists) return false;
+      const data = snap.data() as
+        | { value?: string; expires_at?: Timestamp | Date }
+        | undefined;
+      if (isExpired(readExpiresAt(data ?? {}))) return false;
+      return true;
     });
   }
 
@@ -242,9 +281,16 @@ export class FirestoreStore implements Store {
       const snap = await this.coll().get();
       const keys: string[] = [];
       for (const doc of snap.docs) {
-        keys.push(decodeFirestoreDocID(doc.id));
+        const logical = decodeFirestoreDocID(doc.id);
+        if (prefix !== "" && !logical.startsWith(prefix)) continue;
+        const data = doc.data() as {
+          value?: string;
+          expires_at?: Timestamp | Date;
+        };
+        if (isExpired(readExpiresAt(data))) continue;
+        keys.push(logical);
       }
-      return keysWithPrefix(keys, prefix);
+      return keys;
     });
   }
 
@@ -255,8 +301,13 @@ export class FirestoreStore implements Store {
       const out = new Map<string, JsonRaw>();
       for (const doc of snap.docs) {
         const logical = decodeFirestoreDocID(doc.id);
-        const data = doc.data() as { value?: string };
-        if (data.value !== undefined) out.set(logical, deepCopyRaw(data.value));
+        const data = doc.data() as {
+          value?: string;
+          expires_at?: Timestamp | Date;
+        };
+        if (data.value === undefined) continue;
+        if (isExpired(readExpiresAt(data))) continue;
+        out.set(logical, deepCopyRaw(data.value));
       }
       return out;
     });
@@ -280,6 +331,7 @@ export class FirestoreStore implements Store {
       let batch = this.client.batch();
       let n = 0;
       for (const e of encoded) {
+        // No expiry on restore.
         batch.set(this.coll().doc(e.id), { value: e.value });
         n++;
         if (n >= batchSize) {
@@ -362,13 +414,21 @@ class FirestoreOverlayTx implements Tx {
     if (this.f._isClosed()) throw ErrClosed;
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
     await this.f._mu().withLock(() => {
       this.guard();
-      this.overlay.set(key, { value: deepCopyRaw(value) });
+      this.overlay.set(key, {
+        value: deepCopyRaw(value),
+        expiresAt: metaExpiresAt(meta),
+      });
     });
   }
 
@@ -379,14 +439,18 @@ class FirestoreOverlayTx implements Tx {
       this.guard();
       const e = this.overlay.get(key);
       if (e) {
-        if (e.deleted) throw ErrNotFound;
+        if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
         return deepCopyRaw(e.value);
       }
       if (this.cleared) throw ErrNotFound;
       const snap = await this.f._coll().doc(encodeFirestoreDocID(key)).get();
       if (!snap.exists) throw ErrNotFound;
-      const data = snap.data() as { value?: string };
+      const data = snap.data() as {
+        value?: string;
+        expires_at?: Timestamp | Date;
+      };
       if (data.value === undefined) throw ErrNotFound;
+      if (isExpired(readExpiresAt(data))) throw ErrNotFound;
       return deepCopyRaw(data.value);
     });
   }
@@ -398,13 +462,18 @@ class FirestoreOverlayTx implements Tx {
       this.guard();
       const e = this.overlay.get(key);
       if (e) {
-        if (e.deleted) throw ErrNotFound;
+        if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
         this.overlay.set(key, { deleted: true });
         return;
       }
       if (this.cleared) throw ErrNotFound;
       const snap = await this.f._coll().doc(encodeFirestoreDocID(key)).get();
       if (!snap.exists) throw ErrNotFound;
+      const data = snap.data() as {
+        value?: string;
+        expires_at?: Timestamp | Date;
+      };
+      if (isExpired(readExpiresAt(data ?? {}))) throw ErrNotFound;
       this.overlay.set(key, { deleted: true });
     });
   }
@@ -415,10 +484,15 @@ class FirestoreOverlayTx implements Tx {
     return await this.f._mu().withLock(async () => {
       this.guard();
       const e = this.overlay.get(key);
-      if (e) return !e.deleted;
+      if (e) return !e.deleted && !isExpired(e.expiresAt);
       if (this.cleared) return false;
       const snap = await this.f._coll().doc(encodeFirestoreDocID(key)).get();
-      return snap.exists;
+      if (!snap.exists) return false;
+      const data = snap.data() as {
+        value?: string;
+        expires_at?: Timestamp | Date;
+      };
+      return !isExpired(readExpiresAt(data ?? {}));
     });
   }
 
@@ -443,12 +517,21 @@ class FirestoreOverlayTx implements Tx {
           const logical = decodeFirestoreDocID(doc.id);
           if (prefix !== "" && !logical.startsWith(prefix)) continue;
           const e = this.overlay.get(logical);
-          if (e?.deleted) continue;
+          if (e) {
+            if (e.deleted || isExpired(e.expiresAt)) continue;
+            seen.add(logical);
+            continue;
+          }
+          const data = doc.data() as {
+            value?: string;
+            expires_at?: Timestamp | Date;
+          };
+          if (isExpired(readExpiresAt(data))) continue;
           seen.add(logical);
         }
       }
       for (const [k, e] of this.overlay) {
-        if (e.deleted) continue;
+        if (e.deleted || isExpired(e.expiresAt)) continue;
         if (prefix !== "" && !k.startsWith(prefix)) continue;
         seen.add(k);
       }
@@ -472,7 +555,7 @@ class FirestoreOverlayTx implements Tx {
       for (const [k, e] of this.overlay) {
         const ref = this.f._coll().doc(encodeFirestoreDocID(k));
         if (e.deleted) batch.delete(ref);
-        else batch.set(ref, { value: e.value });
+        else batch.set(ref, firestoreDocFrom(e.value, e.expiresAt ?? null));
         n++;
         if (n >= batchSize) await flush();
       }

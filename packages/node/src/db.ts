@@ -16,15 +16,20 @@ import {
 import { openFromOptions, type RecoveryStore } from "./recovery/index.js";
 import { Manager, restoreInto } from "./snapshot/manager.js";
 import {
+  isAbortSignal,
   newMemory,
   openFirestore,
   openRedis,
   openSQLite,
   type JsonRaw,
+  type SetMeta,
+  type SetOptions,
   type Store,
   type Tx,
 } from "./state/index.js";
 import { ErrRecoveryNotFound } from "./errors.js";
+
+export type { SetOptions };
 
 export interface OpenConfig {
   options: Options;
@@ -144,9 +149,26 @@ export class DB {
     if (this.closed) throw ErrClosed;
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
-    this.guard(signal);
-    return this.state.set(key, value, signal);
+  /**
+   * Store a JSON value at key.
+   * Optional `{ expiresAt }` sets absolute expiry; omit to clear any prior expiry.
+   * Third arg may still be an AbortSignal for backward compatibility.
+   */
+  async set(
+    key: string,
+    value: JsonRaw,
+    optsOrSignal?: SetOptions | AbortSignal,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    let meta: SetMeta | undefined;
+    let sig = signal;
+    if (isAbortSignal(optsOrSignal)) {
+      sig = optsOrSignal;
+    } else if (optsOrSignal) {
+      meta = { expiresAt: optsOrSignal.expiresAt };
+    }
+    this.guard(sig);
+    return this.state.set(key, value, meta, sig);
   }
 
   async get(key: string, signal?: AbortSignal): Promise<JsonRaw> {
