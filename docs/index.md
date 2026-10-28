@@ -15,12 +15,13 @@ okf_version: "0.1"
 
 # Project Docs
 
-* [roadmap.md](roadmap.md) - マイルストーン一覧（現行線 **v0.10.0**）
+* [roadmap.md](roadmap.md) - マイルストーン一覧（現行線 **v0.10.0**／次計画 **v0.11.0**）
 * [wishlist.md](wishlist.md) - PO メモ（未整理）
 * [plans](plans/) - これからやる内容／完了注記
 * [plans/v0.9.0](plans/v0.9.0/) - Phase 8 Node ポート（完了）
 * [plans/v0.10.0](plans/v0.10.0/) - Phase 9 キーデリミタ `:` ＋ Scan（完了注記）
-* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし）
+* [plans/v0.11.0](plans/v0.11.0/) - Phase 10 期限付き書き込み（expires_at・計画中）
+* [plans/open-questions.md](plans/open-questions.md) - 未決プロダクト論点（残件なし。v0.11.0 要決定は版 plan 側）
 * [specs](specs/) - 現行機能の仕様正本
 * [specs/options](specs/options/) - Options（設定）
 * [specs/state](specs/state/) - State API（`:` キー・`Scan`・Adapter 境界）
