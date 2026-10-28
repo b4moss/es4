@@ -1,7 +1,7 @@
 {
   "name": "@b4moss/es4",
-  "version": "0.10.0",
-  "description": "Es4 — embedded State store with pluggable Recovery (Node.js/TypeScript; Go packages/go parity, key delimiter colon + Scan)",
+  "version": "0.11.0",
+  "description": "Es4 \u2014 embedded State store with pluggable Recovery (Node.js/TypeScript; Go packages/go parity, expires_at / WithExpiresAt)",
   "type": "module",
   "license": "MIT",
   "author": "Bicycle for Mind LLC",

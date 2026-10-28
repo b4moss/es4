@@ -1,6 +1,6 @@
 # @b4moss/es4 (Node.js / TypeScript)
 
-TypeScript port of Es4 Go **v0.10.0** contracts (key delimiter `:` + `Scan(prefix)`). Options keys stay **snake_case** (`state_path`, `ES4_*` env). Snapshot／Recovery remain internal. Package: **`@b4moss/es4@0.10.0`**.
+TypeScript port of Es4 Go **v0.11.0** contracts (key delimiter `:` + `Scan(prefix)`). Options keys stay **snake_case** (`state_path`, `ES4_*` env). Snapshot／Recovery remain internal. Package: **`@b4moss/es4@0.11.0`**.
 
 ## Requirements
 
@@ -63,6 +63,6 @@ Compose services: `docker compose -f docker/e2e/docker-compose.yml up -d …` (s
 
 ## Docs
 
-- Current line: [`docs/roadmap.md`](../../docs/roadmap.md)（v0.10.0）
+- Current line: [`docs/roadmap.md`](../../docs/roadmap.md)（v0.11.0）
 - Specs (language-neutral): [`docs/specs/`](../../docs/specs/)
 - v0.10.0 notes: [`docs/plans/v0.10.0/`](../../docs/plans/v0.10.0/)

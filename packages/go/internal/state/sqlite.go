@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -16,7 +17,8 @@ import (
 const sqliteSchema = `
 CREATE TABLE IF NOT EXISTS kv (
 	key TEXT PRIMARY KEY NOT NULL,
-	value TEXT NOT NULL
+	value TEXT NOT NULL,
+	expires_at TEXT
 );
 `
 
@@ -50,9 +52,58 @@ func OpenSQLite(path string) (*SQLite, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: init schema %q: %w", path, err)
 	}
+	if err := migrateSQLiteExpiresAt(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	s := &SQLite{db: db, path: path}
 	s.txCond = sync.NewCond(&s.mu)
 	return s, nil
+}
+
+func migrateSQLiteExpiresAt(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(kv)`)
+	if err != nil {
+		return fmt.Errorf("state: sqlite pragma table_info: %w", err)
+	}
+	defer rows.Close()
+	has := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("state: sqlite pragma scan: %w", err)
+		}
+		if name == "expires_at" {
+			has = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := db.Exec(`ALTER TABLE kv ADD COLUMN expires_at TEXT`); err != nil {
+		return fmt.Errorf("state: sqlite add expires_at: %w", err)
+	}
+	return nil
+}
+
+func sqliteExpiresArg(exp *time.Time) any {
+	if exp == nil {
+		return nil
+	}
+	return FormatExpiresAt(*exp)
+}
+
+func scanSQLiteExpires(ns sql.NullString) (*time.Time, error) {
+	if !ns.Valid || ns.String == "" {
+		return nil, nil
+	}
+	return ParseExpiresAt(ns.String)
 }
 
 func (s *SQLite) waitNoActiveTxLocked() {
@@ -61,7 +112,7 @@ func (s *SQLite) waitNoActiveTxLocked() {
 	}
 }
 
-func (s *SQLite) Set(ctx context.Context, key string, value json.RawMessage) error {
+func (s *SQLite) Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -71,6 +122,7 @@ func (s *SQLite) Set(ctx context.Context, key string, value json.RawMessage) err
 	if err := ValidateValue(value); err != nil {
 		return err
 	}
+	exp := CloneTimePtr(FirstMeta(meta).ExpiresAt)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,9 +134,9 @@ func (s *SQLite) Set(ctx context.Context, key string, value json.RawMessage) err
 		return ErrClosed
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO kv(key, value) VALUES(?, ?)
-ON CONFLICT(key) DO UPDATE SET value=excluded.value
-`, key, string(value))
+INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?)
+ON CONFLICT(key) DO UPDATE SET value=excluded.value, expires_at=excluded.expires_at
+`, key, string(value), sqliteExpiresArg(exp))
 	if err != nil {
 		return fmt.Errorf("state: sqlite set: %w", err)
 	}
@@ -109,12 +161,21 @@ func (s *SQLite) Get(ctx context.Context, key string) (json.RawMessage, error) {
 		return nil, ErrClosed
 	}
 	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM kv WHERE key = ?`, key).Scan(&v)
+	var expNS sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT value, expires_at FROM kv WHERE key = ?`, key).Scan(&v, &expNS)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("state: sqlite get: %w", err)
+	}
+	exp, err := scanSQLiteExpires(expNS)
+	if err != nil {
+		return nil, fmt.Errorf("state: sqlite get expires: %w", err)
+	}
+	if IsExpired(exp) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM kv WHERE key = ?`, key)
+		return nil, ErrNotFound
 	}
 	return append(json.RawMessage(nil), v...), nil
 }
@@ -135,6 +196,22 @@ func (s *SQLite) Delete(ctx context.Context, key string) error {
 	s.waitNoActiveTxLocked()
 	if s.closed {
 		return ErrClosed
+	}
+	var expNS sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT expires_at FROM kv WHERE key = ?`, key).Scan(&expNS)
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("state: sqlite delete lookup: %w", err)
+	}
+	exp, err := scanSQLiteExpires(expNS)
+	if err != nil {
+		return fmt.Errorf("state: sqlite delete expires: %w", err)
+	}
+	if IsExpired(exp) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM kv WHERE key = ?`, key)
+		return ErrNotFound
 	}
 	res, err := s.db.ExecContext(ctx, `DELETE FROM kv WHERE key = ?`, key)
 	if err != nil {
@@ -167,13 +244,21 @@ func (s *SQLite) Exists(ctx context.Context, key string) (bool, error) {
 	if s.closed {
 		return false, ErrClosed
 	}
-	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM kv WHERE key = ? LIMIT 1`, key).Scan(&one)
+	var expNS sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT expires_at FROM kv WHERE key = ? LIMIT 1`, key).Scan(&expNS)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("state: sqlite exists: %w", err)
+	}
+	exp, err := scanSQLiteExpires(expNS)
+	if err != nil {
+		return false, fmt.Errorf("state: sqlite exists expires: %w", err)
+	}
+	if IsExpired(exp) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM kv WHERE key = ?`, key)
+		return false, nil
 	}
 	return true, nil
 }
@@ -215,7 +300,7 @@ func (s *SQLite) Scan(ctx context.Context, prefix string) ([]string, error) {
 	if s.closed {
 		return nil, ErrClosed
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT key FROM kv`)
+	rows, err := s.db.QueryContext(ctx, `SELECT key, expires_at FROM kv`)
 	if err != nil {
 		return nil, fmt.Errorf("state: sqlite scan: %w", err)
 	}
@@ -224,12 +309,21 @@ func (s *SQLite) Scan(ctx context.Context, prefix string) ([]string, error) {
 	out := make([]string, 0)
 	for rows.Next() {
 		var k string
-		if err := rows.Scan(&k); err != nil {
+		var expNS sql.NullString
+		if err := rows.Scan(&k, &expNS); err != nil {
 			return nil, fmt.Errorf("state: sqlite scan row: %w", err)
 		}
-		if strings.HasPrefix(k, prefix) {
-			out = append(out, k)
+		if !strings.HasPrefix(k, prefix) {
+			continue
 		}
+		exp, err := scanSQLiteExpires(expNS)
+		if err != nil {
+			return nil, fmt.Errorf("state: sqlite scan expires: %w", err)
+		}
+		if IsExpired(exp) {
+			continue
+		}
+		out = append(out, k)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("state: sqlite scan rows: %w", err)
@@ -251,7 +345,7 @@ func (s *SQLite) Export(ctx context.Context) (map[string]json.RawMessage, error)
 	if s.closed {
 		return nil, ErrClosed
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM kv`)
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value, expires_at FROM kv`)
 	if err != nil {
 		return nil, fmt.Errorf("state: sqlite export: %w", err)
 	}
@@ -260,10 +354,18 @@ func (s *SQLite) Export(ctx context.Context) (map[string]json.RawMessage, error)
 	out := make(map[string]json.RawMessage)
 	for rows.Next() {
 		var k, v string
-		if err := rows.Scan(&k, &v); err != nil {
+		var expNS sql.NullString
+		if err := rows.Scan(&k, &v, &expNS); err != nil {
 			return nil, fmt.Errorf("state: sqlite export scan: %w", err)
 		}
-		// Deep copy: caller must not share backing bytes with the Store.
+		exp, err := scanSQLiteExpires(expNS)
+		if err != nil {
+			return nil, fmt.Errorf("state: sqlite export expires: %w", err)
+		}
+		if IsExpired(exp) {
+			continue
+		}
+		// Deep copy: values only (no expiry meta).
 		out[k] = append(json.RawMessage(nil), v...)
 	}
 	if err := rows.Err(); err != nil {
@@ -305,7 +407,7 @@ func (s *SQLite) Replace(ctx context.Context, entries map[string]json.RawMessage
 		return fmt.Errorf("state: sqlite replace clear: %w", err)
 	}
 	for k, v := range entries {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO kv(key, value) VALUES(?, ?)`, k, string(v)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, NULL)`, k, string(v)); err != nil {
 			return fmt.Errorf("state: sqlite replace insert: %w", err)
 		}
 	}
@@ -378,18 +480,19 @@ func (t *sqliteTx) withLock(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (t *sqliteTx) Set(ctx context.Context, key string, value json.RawMessage) error {
+func (t *sqliteTx) Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error {
 	if err := ValidateKey(key); err != nil {
 		return err
 	}
 	if err := ValidateValue(value); err != nil {
 		return err
 	}
+	exp := CloneTimePtr(FirstMeta(meta).ExpiresAt)
 	return t.withLock(ctx, func() error {
 		_, err := t.tx.ExecContext(ctx, `
-INSERT INTO kv(key, value) VALUES(?, ?)
-ON CONFLICT(key) DO UPDATE SET value=excluded.value
-`, key, string(value))
+INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?)
+ON CONFLICT(key) DO UPDATE SET value=excluded.value, expires_at=excluded.expires_at
+`, key, string(value), sqliteExpiresArg(exp))
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx set: %w", err)
 		}
@@ -404,12 +507,20 @@ func (t *sqliteTx) Get(ctx context.Context, key string) (json.RawMessage, error)
 	var out json.RawMessage
 	err := t.withLock(ctx, func() error {
 		var v string
-		err := t.tx.QueryRowContext(ctx, `SELECT value FROM kv WHERE key = ?`, key).Scan(&v)
+		var expNS sql.NullString
+		err := t.tx.QueryRowContext(ctx, `SELECT value, expires_at FROM kv WHERE key = ?`, key).Scan(&v, &expNS)
 		if err == sql.ErrNoRows {
 			return ErrNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx get: %w", err)
+		}
+		exp, err := scanSQLiteExpires(expNS)
+		if err != nil {
+			return fmt.Errorf("state: sqlite tx get expires: %w", err)
+		}
+		if IsExpired(exp) {
+			return ErrNotFound
 		}
 		out = append(json.RawMessage(nil), v...)
 		return nil
@@ -422,6 +533,21 @@ func (t *sqliteTx) Delete(ctx context.Context, key string) error {
 		return err
 	}
 	return t.withLock(ctx, func() error {
+		var expNS sql.NullString
+		err := t.tx.QueryRowContext(ctx, `SELECT expires_at FROM kv WHERE key = ?`, key).Scan(&expNS)
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("state: sqlite tx delete lookup: %w", err)
+		}
+		exp, err := scanSQLiteExpires(expNS)
+		if err != nil {
+			return fmt.Errorf("state: sqlite tx delete expires: %w", err)
+		}
+		if IsExpired(exp) {
+			return ErrNotFound
+		}
 		res, err := t.tx.ExecContext(ctx, `DELETE FROM kv WHERE key = ?`, key)
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx delete: %w", err)
@@ -443,8 +569,8 @@ func (t *sqliteTx) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	var ok bool
 	err := t.withLock(ctx, func() error {
-		var one int
-		err := t.tx.QueryRowContext(ctx, `SELECT 1 FROM kv WHERE key = ? LIMIT 1`, key).Scan(&one)
+		var expNS sql.NullString
+		err := t.tx.QueryRowContext(ctx, `SELECT expires_at FROM kv WHERE key = ? LIMIT 1`, key).Scan(&expNS)
 		if err == sql.ErrNoRows {
 			ok = false
 			return nil
@@ -452,7 +578,11 @@ func (t *sqliteTx) Exists(ctx context.Context, key string) (bool, error) {
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx exists: %w", err)
 		}
-		ok = true
+		exp, err := scanSQLiteExpires(expNS)
+		if err != nil {
+			return fmt.Errorf("state: sqlite tx exists expires: %w", err)
+		}
+		ok = !IsExpired(exp)
 		return nil
 	})
 	return ok, err
@@ -473,7 +603,7 @@ func (t *sqliteTx) Scan(ctx context.Context, prefix string) ([]string, error) {
 	}
 	var out []string
 	err := t.withLock(ctx, func() error {
-		rows, err := t.tx.QueryContext(ctx, `SELECT key FROM kv`)
+		rows, err := t.tx.QueryContext(ctx, `SELECT key, expires_at FROM kv`)
 		if err != nil {
 			return fmt.Errorf("state: sqlite tx scan: %w", err)
 		}
@@ -481,12 +611,21 @@ func (t *sqliteTx) Scan(ctx context.Context, prefix string) ([]string, error) {
 		out = make([]string, 0)
 		for rows.Next() {
 			var k string
-			if err := rows.Scan(&k); err != nil {
+			var expNS sql.NullString
+			if err := rows.Scan(&k, &expNS); err != nil {
 				return fmt.Errorf("state: sqlite tx scan row: %w", err)
 			}
-			if strings.HasPrefix(k, prefix) {
-				out = append(out, k)
+			if !strings.HasPrefix(k, prefix) {
+				continue
 			}
+			exp, err := scanSQLiteExpires(expNS)
+			if err != nil {
+				return fmt.Errorf("state: sqlite tx scan expires: %w", err)
+			}
+			if IsExpired(exp) {
+				continue
+			}
+			out = append(out, k)
 		}
 		return rows.Err()
 	})

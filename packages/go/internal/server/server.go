@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/b4moss/es4/packages/go/pkg/es4"
 )
@@ -117,7 +118,12 @@ func (s *Server) handleStateKey(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, CodeInvalidValue, err.Error())
 			return
 		}
-		if err := s.db.Set(ctx, key, body); err != nil {
+		opts, err := parseExpiresAtQuery(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, CodeInvalidExpiry, err.Error())
+			return
+		}
+		if err := s.db.Set(ctx, key, body, opts...); err != nil {
 			mapStateError(w, err)
 			return
 		}
@@ -151,6 +157,21 @@ func (s *Server) handleStateKey(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func parseExpiresAtQuery(r *http.Request) ([]es4.SetOption, error) {
+	raw := r.URL.Query().Get("expires_at")
+	if raw == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return nil, errors.New("invalid expires_at: want RFC3339")
+		}
+	}
+	return []es4.SetOption{es4.WithExpiresAt(t)}, nil
 }
 
 func (s *Server) handleClear(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +242,12 @@ func (s *Server) handleTxKey(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, CodeInvalidValue, err.Error())
 			return
 		}
-		if err := tx.Set(ctx, key, body); err != nil {
+		opts, err := parseExpiresAtQuery(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, CodeInvalidExpiry, err.Error())
+			return
+		}
+		if err := tx.Set(ctx, key, body, opts...); err != nil {
 			mapStateError(w, err)
 			return
 		}

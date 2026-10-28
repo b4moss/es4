@@ -231,7 +231,9 @@ async function runContract(name: string, openStore: () => Promise<Store> | Store
       try {
         const ac = new AbortController();
         ac.abort(new Error("cancelled"));
-        await expect(s.set("k", `1`, ac.signal)).rejects.toThrow(/cancelled|abort/i);
+        await expect(s.set("k", `1`, undefined, ac.signal)).rejects.toThrow(
+          /cancelled|abort/i,
+        );
       } finally {
         await s.close();
       }

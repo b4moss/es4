@@ -12,7 +12,7 @@ State API とは**別面**の公開トランザクション API の正本（Phas
 | 操作 | 備考 |
 |------|------|
 | `BeginTx(ctx)` | ネスト不可（既に Tx 中ならエラー） |
-| Tx `SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` / `SCAN` | キー／値規則は State API と同じ（v0.10.0: `:` 区切り・`Scan`）。欠落 GET/DELETE → エラー、EXISTS → false |
+| Tx `SET` / `GET` / `DELETE` / `EXISTS` / `CLEAR` / `SCAN` | キー／値規則は State API と同じ（v0.10.0: `:` 区切り・`Scan`。**v0.11.0:** Set は `WithExpiresAt` / `{ expiresAt }` を受け付け、Commit で Backend に値＋期限を反映）。欠落 GET/DELETE → エラー、EXISTS → false。期限切れは不在 |
 | `Commit` | 変更を確定。以降の Tx 再利用はエラー |
 | `Rollback` | 変更を破棄。以降の Tx 再利用はエラー |
 

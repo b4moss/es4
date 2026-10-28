@@ -10,12 +10,13 @@ import (
 
 // Error codes returned in HTTP error bodies.
 const (
-	CodeNotFound      = "not_found"
-	CodeInvalidKey    = "invalid_key"
-	CodeInvalidValue  = "invalid_value"
-	CodeConflict      = "conflict"
-	CodeNotReady      = "not_ready"
-	CodeInternal      = "internal"
+	CodeNotFound       = "not_found"
+	CodeInvalidKey     = "invalid_key"
+	CodeInvalidValue   = "invalid_value"
+	CodeInvalidExpiry  = "invalid_expiry"
+	CodeConflict       = "conflict"
+	CodeNotReady       = "not_ready"
+	CodeInternal       = "internal"
 )
 
 type errorBody struct {

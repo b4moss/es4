@@ -17,9 +17,33 @@ const MAX_BODY = 1 << 20; // 1 MiB
 export const CodeNotFound = "not_found";
 export const CodeInvalidKey = "invalid_key";
 export const CodeInvalidValue = "invalid_value";
+export const CodeInvalidExpiry = "invalid_expiry";
 export const CodeConflict = "conflict";
 export const CodeNotReady = "not_ready";
 export const CodeInternal = "internal";
+
+/** RFC3339 / RFC3339Nano shape (Go time.Parse parity for expires_at query). */
+const RFC3339_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Parse `?expires_at=` from a request URL.
+ * Empty / missing → no expiry option. Invalid → error message for 400.
+ */
+export function parseExpiresAtQuery(
+  url: URL,
+): { expiresAt?: Date } | { error: string } {
+  const raw = url.searchParams.get("expires_at");
+  if (raw === null || raw === "") return {};
+  if (!RFC3339_RE.test(raw)) {
+    return { error: "invalid expires_at: want RFC3339" };
+  }
+  const t = Date.parse(raw);
+  if (Number.isNaN(t)) {
+    return { error: "invalid expires_at: want RFC3339" };
+  }
+  return { expiresAt: new Date(t) };
+}
 
 type TxEntry = { tx: Tx; done: boolean };
 
@@ -148,7 +172,14 @@ export class Es4Server {
       const txKey = path.match(/^\/v1\/tx\/([^/]+)\/keys\/([^/]+)$/);
       if (txKey && ["PUT", "GET", "DELETE", "HEAD"].includes(method)) {
         if (!this.requireReady(res)) return;
-        await this.handleTxKey(res, req, txKey[1]!, decodeURIComponent(txKey[2]!), method);
+        await this.handleTxKey(
+          res,
+          req,
+          url,
+          txKey[1]!,
+          decodeURIComponent(txKey[2]!),
+          method,
+        );
         return;
       }
 
@@ -164,6 +195,7 @@ export class Es4Server {
         await this.handleStateKey(
           res,
           req,
+          url,
           decodeURIComponent(stateKey[1]!),
           method,
         );
@@ -211,6 +243,7 @@ export class Es4Server {
   private async handleStateKey(
     res: ServerResponse,
     req: IncomingMessage,
+    url: URL,
     key: string,
     method: string,
   ): Promise<void> {
@@ -221,8 +254,17 @@ export class Es4Server {
     try {
       switch (method) {
         case "PUT": {
+          const parsed = parseExpiresAtQuery(url);
+          if ("error" in parsed) {
+            writeError(res, 400, CodeInvalidExpiry, parsed.error);
+            return;
+          }
           const body = await readBody(req);
-          await this.db.set(key, body);
+          const opts =
+            parsed.expiresAt !== undefined
+              ? { expiresAt: parsed.expiresAt }
+              : undefined;
+          await this.db.set(key, body, opts);
           res.writeHead(200);
           res.end();
           break;
@@ -254,6 +296,7 @@ export class Es4Server {
   private async handleTxKey(
     res: ServerResponse,
     req: IncomingMessage,
+    url: URL,
     id: string,
     key: string,
     method: string,
@@ -274,8 +317,17 @@ export class Es4Server {
     try {
       switch (method) {
         case "PUT": {
+          const parsed = parseExpiresAtQuery(url);
+          if ("error" in parsed) {
+            writeError(res, 400, CodeInvalidExpiry, parsed.error);
+            return;
+          }
           const body = await readBody(req);
-          await entry.tx.set(key, body);
+          const meta =
+            parsed.expiresAt !== undefined
+              ? { expiresAt: parsed.expiresAt }
+              : undefined;
+          await entry.tx.set(key, body, meta);
           res.writeHead(200);
           res.end();
           break;

@@ -1,6 +1,6 @@
 # State 仕様
 
-現行バージョンに存在する公開 State API の正本（Phase 1–7 に加え、**v0.10.0** でキー区切り `:` 化と `Scan(prefix)` を追加。Go / Node パリティ）。
+現行バージョンに存在する公開 State API の正本（Phase 1–7 に加え、**v0.10.0** でキー区切り `:` 化と `Scan(prefix)`、**v0.11.0** で期限付き書き込みを追加。Go / Node パリティ）。
 
 ## 概要
 
@@ -11,14 +11,24 @@ JSON ドキュメントストア。公開面は State API と **別面の Tx API
 
 | 操作 | 欠落キー | 備考 |
 |------|----------|------|
-| `SET` | （作成／上書き） | 値は任意の JSON ドキュメント |
-| `GET` | **エラー** | |
-| `DELETE` | **エラー** | |
-| `EXISTS` | `false`（エラーなし） | |
+| `SET` | （作成／上書き） | 値は任意の JSON ドキュメント。**オプションで絶対期限 `ExpiresAt`**（Go `WithExpiresAt` / Node `{ expiresAt }`）。省略＝無期限 |
+| `GET` | **エラー** | 期限切れも欠落扱い（`ErrNotFound`） |
+| `DELETE` | **エラー** | 期限切れも欠落扱い |
+| `EXISTS` | `false`（エラーなし） | 期限切れは `false` |
 | `CLEAR` | — | 全消去。空でも成功。Firestore は **設定 collection 内のみ** |
-| `SCAN(prefix)` | — | prefix **前方一致**の論理キーを **一括** `[]string` で返す（ページングなし）。空 prefix＝全列挙。Tx 内可 |
+| `SCAN(prefix)` | — | prefix **前方一致**の論理キーを **一括** `[]string` で返す（ページングなし）。空 prefix＝全列挙。Tx 内可。**期限切れは除外** |
 
 呼び出しは `context.Context` 付きの同期 API（非同期志向。同期前提のブロッキング設計にはしない）。
+
+## 期限（expires_at・v0.11.0）
+
+- 公開 Set はオプションで期限（UTC 絶対時刻）を付けられる
+- 期限なし Set は、既存の期限メタを **除去**する
+- Get / Exists / Scan は、保存上残っていても **期限切れを不在扱い**する（Firestore TTL の削除遅延を吸収）
+- 過去の `ExpiresAt` での Set は成功する。直後の Get／Exists／Scan は不在扱い
+- 期限は value JSON の中身ではなく、**Backend メタデータ**として持つ
+- **Export／Replace は値のみ**。期限メタは含めない。期限切れキーは Export からも除外する
+- Recovery／Snapshot も Export 契約に追随。**期限付きエントリの期限は Recovery 非対応**（Restore 後は値のみ・期限なし）
 
 ## キー（v0.10.0）
 
@@ -51,10 +61,10 @@ State Adapter は差し替え可能。全 Backend が共有する内部契約は
 ### 実装済み Backend
 
 - **Phase 1:** インメモリ（`Memory`）
-- **Phase 2:** オンディスク SQLite ファイル（`SQLite`、ドライバ `modernc.org/sqlite`・CGO なし）。スキーマは単純 KV（`key TEXT PRIMARY KEY`、value に JSON）
-- **Phase 7 / v0.8.0:** Redis プロトコル State（`Redis`、クライアント `github.com/redis/go-redis/v9`・CGO なし）。**Valkey は同一アダプタ**（`state_backend=valkey` はエイリアス）。単一 HASH（`state_redis_key_prefix` または既定 `es4:state`）の field = 論理キー、value = JSON bytes
-- **Phase 7 / v0.8.0:** Firestore（`Firestore`、`cloud.google.com/go/firestore`）。単一 collection・1 論理キー = 1 ドキュメント。Doc ID = パス・パーセントエンコード＋ `:` → `%3A`（v0.10.0）。フィールド最低限 `value`（JSON テキスト）。サブコレクション階層写像は採用しない。Emulator は `FIRESTORE_EMULATOR_HOST`（Options 外）
-- Snapshot / Restore 用に Export / Replace を内部で持つ（論理 `{ "entries": { ... } }`。DB バイナリコピーはしない）
+- **Phase 2:** オンディスク SQLite ファイル（`SQLite`、ドライバ `modernc.org/sqlite`・CGO なし）。スキーマは KV（`key TEXT PRIMARY KEY`、value に JSON、任意 `expires_at TEXT`）
+- **Phase 7 / v0.8.0:** Redis プロトコル State（`Redis`、クライアント `github.com/redis/go-redis/v9`・CGO なし）。**Valkey は同一アダプタ**（`state_backend=valkey` はエイリアス）。単一 HASH（`state_redis_key_prefix` または既定 `es4:state`）の field = 論理キー、value = JSON bytes。**v0.11.0:** 期限は併置メタ HASH（`…:meta`・非公開）＋**読み取りフィルタのみ**（ネイティブ per-field EXPIRE は使わない）
+- **Phase 7 / v0.8.0:** Firestore（`Firestore`、`cloud.google.com/go/firestore`）。単一 collection・1 論理キー = 1 ドキュメント。Doc ID = パス・パーセントエンコード＋ `:` → `%3A`（v0.10.0）。フィールド最低限 `value`（JSON テキスト）。**v0.11.0:** 任意で **`expires_at`（日時型 Timestamp）**。期限なしはフィールドを書かない／削除する（ゼロ値禁止）。利用側が collection に TTL ポリシーを `expires_at` へ設定する。サブコレクション階層写像は採用しない。Emulator は `FIRESTORE_EMULATOR_HOST`（Options 外）
+- Snapshot / Restore 用に Export / Replace を内部で持つ（論理 `{ "entries": { ... } }`。DB バイナリコピーはしない。**期限メタは含めない**）
 
 ### Firestore Clear／Replace 範囲（重要）
 

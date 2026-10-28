@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Sentinel errors for the State API.
@@ -36,19 +37,24 @@ var (
 // Redis/Valkey (and any future backend). Implementations must honor Export
 // deep-copy, Replace atomicity, and ErrClosed after Close. See package docs.
 type Store interface {
-	Set(ctx context.Context, key string, value json.RawMessage) error
+	// Set stores value at key. Optional meta[0].ExpiresAt sets an absolute
+	// expiry (past times are stored but treated as absent on read). Omitting
+	// meta (or nil ExpiresAt) means no expiry and clears any prior expiry.
+	Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error
 	Get(ctx context.Context, key string) (json.RawMessage, error)
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
 	// Scan returns all logical keys with the given string prefix in one shot
 	// (no paging). Empty prefix lists every key. Order is unspecified.
+	// Expired keys are omitted.
 	Scan(ctx context.Context, prefix string) ([]string, error)
-	// Export returns a deep copy of all entries (for Snapshot payload).
-	// The returned map and each RawMessage are independent of Store storage.
+	// Export returns a deep copy of all non-expired entries (for Snapshot).
+	// Expiry metadata is not included (values only).
 	Export(ctx context.Context) (map[string]json.RawMessage, error)
 	// Replace atomically replaces all entries (for Restore).
 	// On success, only entries is visible; an empty map clears the Store.
+	// Restored entries have no expiry metadata.
 	Replace(ctx context.Context, entries map[string]json.RawMessage) error
 	// BeginTx starts a transaction. Nested Begin returns ErrNestedTx.
 	BeginTx(ctx context.Context) (Tx, error)
@@ -57,17 +63,23 @@ type Store interface {
 	Close() error
 }
 
+// memEntry is one Memory store record.
+type memEntry struct {
+	value     json.RawMessage
+	expiresAt *time.Time
+}
+
 // Memory is an in-process JSON document store.
 type Memory struct {
 	mu      sync.Mutex
-	entries map[string]json.RawMessage
+	entries map[string]memEntry
 	closed  bool
 	active  *memoryTx
 }
 
 // NewMemory returns an empty in-memory State adapter.
 func NewMemory() *Memory {
-	return &Memory{entries: make(map[string]json.RawMessage)}
+	return &Memory{entries: make(map[string]memEntry)}
 }
 
 // ValidateKey checks hierarchical key rules (`:` separator).
@@ -124,7 +136,7 @@ func ValidateValue(value json.RawMessage) error {
 	return nil
 }
 
-func (m *Memory) Set(ctx context.Context, key string, value json.RawMessage) error {
+func (m *Memory) Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -135,13 +147,14 @@ func (m *Memory) Set(ctx context.Context, key string, value json.RawMessage) err
 		return err
 	}
 	cp := append(json.RawMessage(nil), value...)
+	exp := CloneTimePtr(FirstMeta(meta).ExpiresAt)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
 		return ErrClosed
 	}
-	m.entries[key] = cp
+	m.entries[key] = memEntry{value: cp, expiresAt: exp}
 	return nil
 }
 
@@ -158,11 +171,15 @@ func (m *Memory) Get(ctx context.Context, key string) (json.RawMessage, error) {
 	if m.closed {
 		return nil, ErrClosed
 	}
-	v, ok := m.entries[key]
+	e, ok := m.entries[key]
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return append(json.RawMessage(nil), v...), nil
+	if IsExpired(e.expiresAt) {
+		delete(m.entries, key)
+		return nil, ErrNotFound
+	}
+	return append(json.RawMessage(nil), e.value...), nil
 }
 
 func (m *Memory) Delete(ctx context.Context, key string) error {
@@ -178,7 +195,12 @@ func (m *Memory) Delete(ctx context.Context, key string) error {
 	if m.closed {
 		return ErrClosed
 	}
-	if _, ok := m.entries[key]; !ok {
+	e, ok := m.entries[key]
+	if !ok {
+		return ErrNotFound
+	}
+	if IsExpired(e.expiresAt) {
+		delete(m.entries, key)
 		return ErrNotFound
 	}
 	delete(m.entries, key)
@@ -198,8 +220,15 @@ func (m *Memory) Exists(ctx context.Context, key string) (bool, error) {
 	if m.closed {
 		return false, ErrClosed
 	}
-	_, ok := m.entries[key]
-	return ok, nil
+	e, ok := m.entries[key]
+	if !ok {
+		return false, nil
+	}
+	if IsExpired(e.expiresAt) {
+		delete(m.entries, key)
+		return false, nil
+	}
+	return true, nil
 }
 
 func (m *Memory) Clear(ctx context.Context) error {
@@ -212,7 +241,7 @@ func (m *Memory) Clear(ctx context.Context) error {
 	if m.closed {
 		return ErrClosed
 	}
-	m.entries = make(map[string]json.RawMessage)
+	m.entries = make(map[string]memEntry)
 	return nil
 }
 
@@ -230,10 +259,14 @@ func (m *Memory) Scan(ctx context.Context, prefix string) ([]string, error) {
 		return nil, ErrClosed
 	}
 	out := make([]string, 0, len(m.entries))
-	for k := range m.entries {
-		if strings.HasPrefix(k, prefix) {
-			out = append(out, k)
+	for k, e := range m.entries {
+		if !strings.HasPrefix(k, prefix) {
+			continue
 		}
+		if IsExpired(e.expiresAt) {
+			continue
+		}
+		out = append(out, k)
 	}
 	return out, nil
 }
@@ -249,8 +282,11 @@ func (m *Memory) Export(ctx context.Context) (map[string]json.RawMessage, error)
 		return nil, ErrClosed
 	}
 	out := make(map[string]json.RawMessage, len(m.entries))
-	for k, v := range m.entries {
-		out[k] = append(json.RawMessage(nil), v...)
+	for k, e := range m.entries {
+		if IsExpired(e.expiresAt) {
+			continue
+		}
+		out[k] = append(json.RawMessage(nil), e.value...)
 	}
 	return out, nil
 }
@@ -260,7 +296,7 @@ func (m *Memory) Replace(ctx context.Context, entries map[string]json.RawMessage
 		return err
 	}
 
-	next := make(map[string]json.RawMessage, len(entries))
+	next := make(map[string]memEntry, len(entries))
 	for k, v := range entries {
 		if err := ValidateKey(k); err != nil {
 			return err
@@ -268,7 +304,7 @@ func (m *Memory) Replace(ctx context.Context, entries map[string]json.RawMessage
 		if err := ValidateValue(v); err != nil {
 			return err
 		}
-		next[k] = append(json.RawMessage(nil), v...)
+		next[k] = memEntry{value: append(json.RawMessage(nil), v...)}
 	}
 
 	m.mu.Lock()
@@ -313,8 +349,9 @@ func (m *Memory) Close() error {
 }
 
 type overlayEntry struct {
-	deleted bool
-	value   json.RawMessage
+	deleted   bool
+	value     json.RawMessage
+	expiresAt *time.Time
 }
 
 type memoryTx struct {
@@ -339,7 +376,14 @@ func (t *memoryTx) withLock(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-func (t *memoryTx) Set(ctx context.Context, key string, value json.RawMessage) error {
+func liveMemEntry(e memEntry) (memEntry, bool) {
+	if IsExpired(e.expiresAt) {
+		return memEntry{}, false
+	}
+	return e, true
+}
+
+func (t *memoryTx) Set(ctx context.Context, key string, value json.RawMessage, meta ...SetMeta) error {
 	if err := ValidateKey(key); err != nil {
 		return err
 	}
@@ -347,8 +391,9 @@ func (t *memoryTx) Set(ctx context.Context, key string, value json.RawMessage) e
 		return err
 	}
 	cp := append(json.RawMessage(nil), value...)
+	exp := CloneTimePtr(FirstMeta(meta).ExpiresAt)
 	return t.withLock(ctx, func() error {
-		t.overlay[key] = overlayEntry{value: cp}
+		t.overlay[key] = overlayEntry{value: cp, expiresAt: exp}
 		return nil
 	})
 }
@@ -360,7 +405,7 @@ func (t *memoryTx) Get(ctx context.Context, key string) (json.RawMessage, error)
 	var out json.RawMessage
 	err := t.withLock(ctx, func() error {
 		if e, ok := t.overlay[key]; ok {
-			if e.deleted {
+			if e.deleted || IsExpired(e.expiresAt) {
 				return ErrNotFound
 			}
 			out = append(json.RawMessage(nil), e.value...)
@@ -369,11 +414,15 @@ func (t *memoryTx) Get(ctx context.Context, key string) (json.RawMessage, error)
 		if t.cleared {
 			return ErrNotFound
 		}
-		v, ok := t.m.entries[key]
+		e, ok := t.m.entries[key]
 		if !ok {
 			return ErrNotFound
 		}
-		out = append(json.RawMessage(nil), v...)
+		live, ok := liveMemEntry(e)
+		if !ok {
+			return ErrNotFound
+		}
+		out = append(json.RawMessage(nil), live.value...)
 		return nil
 	})
 	return out, err
@@ -385,7 +434,7 @@ func (t *memoryTx) Delete(ctx context.Context, key string) error {
 	}
 	return t.withLock(ctx, func() error {
 		if e, ok := t.overlay[key]; ok {
-			if e.deleted {
+			if e.deleted || IsExpired(e.expiresAt) {
 				return ErrNotFound
 			}
 			t.overlay[key] = overlayEntry{deleted: true}
@@ -394,7 +443,11 @@ func (t *memoryTx) Delete(ctx context.Context, key string) error {
 		if t.cleared {
 			return ErrNotFound
 		}
-		if _, ok := t.m.entries[key]; !ok {
+		e, ok := t.m.entries[key]
+		if !ok {
+			return ErrNotFound
+		}
+		if IsExpired(e.expiresAt) {
 			return ErrNotFound
 		}
 		t.overlay[key] = overlayEntry{deleted: true}
@@ -409,14 +462,15 @@ func (t *memoryTx) Exists(ctx context.Context, key string) (bool, error) {
 	var ok bool
 	err := t.withLock(ctx, func() error {
 		if e, hit := t.overlay[key]; hit {
-			ok = !e.deleted
+			ok = !e.deleted && !IsExpired(e.expiresAt)
 			return nil
 		}
 		if t.cleared {
 			ok = false
 			return nil
 		}
-		_, ok = t.m.entries[key]
+		e, hit := t.m.entries[key]
+		ok = hit && !IsExpired(e.expiresAt)
 		return nil
 	})
 	return ok, err
@@ -438,18 +492,25 @@ func (t *memoryTx) Scan(ctx context.Context, prefix string) ([]string, error) {
 	err := t.withLock(ctx, func() error {
 		seen := make(map[string]struct{})
 		if !t.cleared {
-			for k := range t.m.entries {
+			for k, base := range t.m.entries {
 				if !strings.HasPrefix(k, prefix) {
 					continue
 				}
-				if e, ok := t.overlay[k]; ok && e.deleted {
+				if e, ok := t.overlay[k]; ok {
+					if e.deleted || IsExpired(e.expiresAt) {
+						continue
+					}
+					seen[k] = struct{}{}
+					continue
+				}
+				if IsExpired(base.expiresAt) {
 					continue
 				}
 				seen[k] = struct{}{}
 			}
 		}
 		for k, e := range t.overlay {
-			if e.deleted || !strings.HasPrefix(k, prefix) {
+			if e.deleted || IsExpired(e.expiresAt) || !strings.HasPrefix(k, prefix) {
 				continue
 			}
 			seen[k] = struct{}{}
@@ -473,14 +534,17 @@ func (t *memoryTx) Commit() error {
 		return ErrClosed
 	}
 	if t.cleared {
-		t.m.entries = make(map[string]json.RawMessage)
+		t.m.entries = make(map[string]memEntry)
 	}
 	for k, e := range t.overlay {
 		if e.deleted {
 			delete(t.m.entries, k)
 			continue
 		}
-		t.m.entries[k] = append(json.RawMessage(nil), e.value...)
+		t.m.entries[k] = memEntry{
+			value:     append(json.RawMessage(nil), e.value...),
+			expiresAt: CloneTimePtr(e.expiresAt),
+		}
 	}
 	t.done = true
 	t.m.active = nil

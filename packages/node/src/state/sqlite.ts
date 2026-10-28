@@ -11,8 +11,13 @@ import {
 import { AsyncMutex } from "./mutex.js";
 import {
   deepCopyRaw,
-  keysWithPrefix,
+  formatExpiresAt,
+  isExpired,
+  metaExpiresAt,
+  parseExpiresAt,
   type JsonRaw,
+  type OverlayEntry,
+  type SetMeta,
   type Store,
   type Tx,
   toEntriesMap,
@@ -24,9 +29,27 @@ import {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY NOT NULL,
-  value TEXT NOT NULL
+  value TEXT NOT NULL,
+  expires_at TEXT
 );
 `;
+
+function migrateExpiresAt(db: Database.Database): void {
+  const cols = db.prepare(`PRAGMA table_info(kv)`).all() as Array<{
+    name: string;
+  }>;
+  if (cols.some((c) => c.name === "expires_at")) return;
+  db.exec(`ALTER TABLE kv ADD COLUMN expires_at TEXT`);
+}
+
+function expiresArg(exp: Date | null): string | null {
+  return exp ? formatExpiresAt(exp) : null;
+}
+
+function rowExpires(raw: string | null | undefined): Date | null {
+  if (raw == null || raw === "") return null;
+  return parseExpiresAt(raw);
+}
 
 export class SQLiteStore implements Store {
   private readonly mu = new AsyncMutex();
@@ -43,6 +66,7 @@ export class SQLiteStore implements Store {
     mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.exec(SCHEMA);
+    migrateExpiresAt(db);
     return new SQLiteStore(db, path);
   }
 
@@ -62,17 +86,23 @@ export class SQLiteStore implements Store {
     }
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
+    const exp = metaExpiresAt(meta);
     await this.withNoTx(() => {
       this.db
         .prepare(
-          `INSERT INTO kv(key, value) VALUES(?, ?)
-           ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+          `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value, expires_at=excluded.expires_at`,
         )
-        .run(key, value);
+        .run(key, value, expiresArg(exp));
     });
   }
 
@@ -81,9 +111,13 @@ export class SQLiteStore implements Store {
     validateKey(key);
     return await this.withNoTx(() => {
       const row = this.db
-        .prepare(`SELECT value FROM kv WHERE key = ?`)
-        .get(key) as { value: string } | undefined;
+        .prepare(`SELECT value, expires_at FROM kv WHERE key = ?`)
+        .get(key) as { value: string; expires_at: string | null } | undefined;
       if (!row) throw ErrNotFound;
+      if (isExpired(rowExpires(row.expires_at))) {
+        this.db.prepare(`DELETE FROM kv WHERE key = ?`).run(key);
+        throw ErrNotFound;
+      }
       return deepCopyRaw(row.value);
     });
   }
@@ -92,6 +126,14 @@ export class SQLiteStore implements Store {
     throwIfAborted(signal);
     validateKey(key);
     await this.withNoTx(() => {
+      const row = this.db
+        .prepare(`SELECT expires_at FROM kv WHERE key = ?`)
+        .get(key) as { expires_at: string | null } | undefined;
+      if (!row) throw ErrNotFound;
+      if (isExpired(rowExpires(row.expires_at))) {
+        this.db.prepare(`DELETE FROM kv WHERE key = ?`).run(key);
+        throw ErrNotFound;
+      }
       const info = this.db.prepare(`DELETE FROM kv WHERE key = ?`).run(key);
       if (info.changes === 0) throw ErrNotFound;
     });
@@ -102,9 +144,14 @@ export class SQLiteStore implements Store {
     validateKey(key);
     return await this.withNoTx(() => {
       const row = this.db
-        .prepare(`SELECT 1 AS ok FROM kv WHERE key = ?`)
-        .get(key);
-      return row !== undefined;
+        .prepare(`SELECT expires_at FROM kv WHERE key = ?`)
+        .get(key) as { expires_at: string | null } | undefined;
+      if (!row) return false;
+      if (isExpired(rowExpires(row.expires_at))) {
+        this.db.prepare(`DELETE FROM kv WHERE key = ?`).run(key);
+        return false;
+      }
+      return true;
     });
   }
 
@@ -120,12 +167,15 @@ export class SQLiteStore implements Store {
     validateScanPrefix(prefix);
     return await this.withNoTx(() => {
       const rows = this.db
-        .prepare(`SELECT key FROM kv`)
-        .all() as Array<{ key: string }>;
-      return keysWithPrefix(
-        rows.map((r) => r.key),
-        prefix,
-      );
+        .prepare(`SELECT key, expires_at FROM kv`)
+        .all() as Array<{ key: string; expires_at: string | null }>;
+      const out: string[] = [];
+      for (const r of rows) {
+        if (prefix !== "" && !r.key.startsWith(prefix)) continue;
+        if (isExpired(rowExpires(r.expires_at))) continue;
+        out.push(r.key);
+      }
+      return out;
     });
   }
 
@@ -133,10 +183,17 @@ export class SQLiteStore implements Store {
     throwIfAborted(signal);
     return await this.withNoTx(() => {
       const rows = this.db
-        .prepare(`SELECT key, value FROM kv`)
-        .all() as Array<{ key: string; value: string }>;
+        .prepare(`SELECT key, value, expires_at FROM kv`)
+        .all() as Array<{
+        key: string;
+        value: string;
+        expires_at: string | null;
+      }>;
       const out = new Map<string, JsonRaw>();
-      for (const r of rows) out.set(r.key, deepCopyRaw(r.value));
+      for (const r of rows) {
+        if (isExpired(rowExpires(r.expires_at))) continue;
+        out.set(r.key, deepCopyRaw(r.value));
+      }
       return out;
     });
   }
@@ -155,7 +212,7 @@ export class SQLiteStore implements Store {
       const tx = this.db.transaction(() => {
         this.db.prepare(`DELETE FROM kv`).run();
         const ins = this.db.prepare(
-          `INSERT INTO kv(key, value) VALUES(?, ?)`,
+          `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, NULL)`,
         );
         for (const [k, v] of map) ins.run(k, v);
       });
@@ -168,8 +225,6 @@ export class SQLiteStore implements Store {
     return await this.mu.withLock(() => {
       if (this.closed) throw ErrClosed;
       if (this.active) throw ErrNestedTx;
-      // better-sqlite3 sync transaction — use overlay like Memory for async API,
-      // then apply in one SQL transaction on commit (Go uses real sql.Tx).
       const tx = new SQLiteOverlayTx(this);
       this.active = tx;
       return tx;
@@ -211,10 +266,6 @@ export class SQLiteStore implements Store {
   }
 }
 
-type OverlayEntry =
-  | { deleted: true }
-  | { deleted?: false; value: JsonRaw };
-
 class SQLiteOverlayTx implements Tx {
   private overlay = new Map<string, OverlayEntry>();
   private cleared = false;
@@ -231,13 +282,21 @@ class SQLiteOverlayTx implements Tx {
     if (this.s._isClosed()) throw ErrClosed;
   }
 
-  async set(key: string, value: JsonRaw, signal?: AbortSignal): Promise<void> {
+  async set(
+    key: string,
+    value: JsonRaw,
+    meta?: SetMeta,
+    signal?: AbortSignal,
+  ): Promise<void> {
     throwIfAborted(signal);
     validateKey(key);
     validateValue(value);
     await this.s._mu().withLock(() => {
       this.guard();
-      this.overlay.set(key, { value: deepCopyRaw(value) });
+      this.overlay.set(key, {
+        value: deepCopyRaw(value),
+        expiresAt: metaExpiresAt(meta),
+      });
     });
   }
 
@@ -248,15 +307,16 @@ class SQLiteOverlayTx implements Tx {
       this.guard();
       const e = this.overlay.get(key);
       if (e) {
-        if (e.deleted) throw ErrNotFound;
+        if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
         return deepCopyRaw(e.value);
       }
       if (this.cleared) throw ErrNotFound;
       const row = this.s
         ._db()
-        .prepare(`SELECT value FROM kv WHERE key = ?`)
-        .get(key) as { value: string } | undefined;
+        .prepare(`SELECT value, expires_at FROM kv WHERE key = ?`)
+        .get(key) as { value: string; expires_at: string | null } | undefined;
       if (!row) throw ErrNotFound;
+      if (isExpired(rowExpires(row.expires_at))) throw ErrNotFound;
       return deepCopyRaw(row.value);
     });
   }
@@ -268,16 +328,16 @@ class SQLiteOverlayTx implements Tx {
       this.guard();
       const e = this.overlay.get(key);
       if (e) {
-        if (e.deleted) throw ErrNotFound;
+        if (e.deleted || isExpired(e.expiresAt)) throw ErrNotFound;
         this.overlay.set(key, { deleted: true });
         return;
       }
       if (this.cleared) throw ErrNotFound;
       const row = this.s
         ._db()
-        .prepare(`SELECT 1 AS ok FROM kv WHERE key = ?`)
-        .get(key);
-      if (!row) throw ErrNotFound;
+        .prepare(`SELECT expires_at FROM kv WHERE key = ?`)
+        .get(key) as { expires_at: string | null } | undefined;
+      if (!row || isExpired(rowExpires(row.expires_at))) throw ErrNotFound;
       this.overlay.set(key, { deleted: true });
     });
   }
@@ -288,13 +348,14 @@ class SQLiteOverlayTx implements Tx {
     return await this.s._mu().withLock(() => {
       this.guard();
       const e = this.overlay.get(key);
-      if (e) return !e.deleted;
+      if (e) return !e.deleted && !isExpired(e.expiresAt);
       if (this.cleared) return false;
       const row = this.s
         ._db()
-        .prepare(`SELECT 1 AS ok FROM kv WHERE key = ?`)
-        .get(key);
-      return row !== undefined;
+        .prepare(`SELECT expires_at FROM kv WHERE key = ?`)
+        .get(key) as { expires_at: string | null } | undefined;
+      if (!row) return false;
+      return !isExpired(rowExpires(row.expires_at));
     });
   }
 
@@ -316,17 +377,22 @@ class SQLiteOverlayTx implements Tx {
       if (!this.cleared) {
         const rows = this.s
           ._db()
-          .prepare(`SELECT key FROM kv`)
-          .all() as Array<{ key: string }>;
+          .prepare(`SELECT key, expires_at FROM kv`)
+          .all() as Array<{ key: string; expires_at: string | null }>;
         for (const r of rows) {
           if (prefix !== "" && !r.key.startsWith(prefix)) continue;
           const e = this.overlay.get(r.key);
-          if (e?.deleted) continue;
+          if (e) {
+            if (e.deleted || isExpired(e.expiresAt)) continue;
+            seen.add(r.key);
+            continue;
+          }
+          if (isExpired(rowExpires(r.expires_at))) continue;
           seen.add(r.key);
         }
       }
       for (const [k, e] of this.overlay) {
-        if (e.deleted) continue;
+        if (e.deleted || isExpired(e.expiresAt)) continue;
         if (prefix !== "" && !k.startsWith(prefix)) continue;
         seen.add(k);
       }
@@ -345,9 +411,9 @@ class SQLiteOverlayTx implements Tx {
             db.prepare(`DELETE FROM kv WHERE key = ?`).run(k);
           } else {
             db.prepare(
-              `INSERT INTO kv(key, value) VALUES(?, ?)
-               ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
-            ).run(k, e.value);
+              `INSERT INTO kv(key, value, expires_at) VALUES(?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value, expires_at=excluded.expires_at`,
+            ).run(k, e.value, expiresArg(e.expiresAt ?? null));
           }
         }
       });

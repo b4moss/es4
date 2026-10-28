@@ -106,3 +106,10 @@ HTTP Es4 Server（`packages/go/cmd/es4-server` / `internal/server`）のテス�
 ----
 
 以上
+
+### expires_at クエリ（v0.11.0）
+
+- `PUT /v1/keys/{key}?expires_at=<RFC3339>` → 期限付き Set
+- クエリ省略 → 無期限
+- 不正日時 → **400** `invalid_expiry`
+- 過去時刻で Set した直後の GET → **404**

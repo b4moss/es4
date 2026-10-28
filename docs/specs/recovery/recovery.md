@@ -64,6 +64,11 @@ Snapshot 封筒を永続化し、再起動時に State へ戻す。公開 API �
 
 - Restore 時、現行 `ValidateKey` に合わないエントリ（旧 `/` 階層キーや不正 `:` キー）は **捨てて** Replace する（決定 D）。自動マイグレーションはしない — 利用者は捨てて再投入する
 
+## 期限メタと Recovery（v0.11.0）
+
+- State エントリの **期限メタは Snapshot／Recovery の対象外**（Export／Replace は値のみ）
+- Restore 後、期限情報は復元されない（値のみ・無期限）。期限が必要なデータは Firestore 直置き＋TTL（および読取フィルタ）を前提とし、Export／Recovery に頼らない
+
 ## 関連
 
 - テスト仕様: [`docs/tests/recovery/`](../../tests/recovery/)

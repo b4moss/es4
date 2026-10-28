@@ -18,7 +18,7 @@ SemVer・マイルストーン一覧のハブ。詳細な作業内容の正本�
 | `v0.8.0`（暫定） | Phase 7 — 外部サービスの充実（State Backend） | **実装完了**（Git タグ `v0.8.0`。Redis／Valkey＋Firestore State + E2E） | Redis／Valkey（同一アダプタ）と Firestore を State Backend として追加 | [plans/v0.8.0](./plans/v0.8.0/) · [specs/state](./specs/state/) · [tests/e2e](./tests/e2e/) |
 | `v0.9.0`（暫定） | Phase 8 — Node.js／TypeScript ポート | **実装完了**（Git タグ `v0.9.0` + npm `@b4moss/es4@0.9.0`） | Go `v0.8.0` 契約を `packages/node` に同型移植（Options／State／Tx／Recovery／Server／E2E） | [plans/v0.9.0](./plans/v0.9.0/) |
 | `v0.10.0`（暫定） | Phase 9 — キーデリミタ `:` 化 ＋ Scan | **実装完了**（Git タグ `v0.10.0` + Go module `packages/go/v0.10.0` + npm `@b4moss/es4@0.10.0`） | 論理キー `/` → `:`（破壊的）＋薄い `Scan(prefix)` | [plans/v0.10.0](./plans/v0.10.0/) · [specs/state](./specs/state/) · [specs/es4-server](./specs/es4-server/) |
-| `v0.11.0`（暫定） | Phase 10 — 期限付き書き込み（expires_at） | **方針確定**（docs のみ。要決定クローズ 2026-10-28。コード未着手） | Set＋options（`WithExpiresAt`）。Firestore 日時型 `expires_at`。読取時期限切れ＝不在。HTTP クエリ。Redis は読取フィルタ。Export は値のみ | [plans/v0.11.0](./plans/v0.11.0/) |
+| `v0.11.0`（暫定） | Phase 10 — 期限付き書き込み（expires_at） | **実装中**（計画 PR #52 マージ済み。実装 PR で Go／Node／specs） | Set＋options（`WithExpiresAt`）。Firestore 日時型 `expires_at`。読取時期限切れ＝不在。HTTP クエリ。Redis は読取フィルタ。Export は値のみ | [plans/v0.11.0](./plans/v0.11.0/) · [specs/state](./specs/state/) |
 
 版号の付け方は [versioning-rule](./charter/versioning-rule.md) に従う。`v0.n.0` は正式リリース前のため破壊的変更を許容する。正式な版名が決まったら本表と `plans/` フォルダ名を揃えて更新する。
 

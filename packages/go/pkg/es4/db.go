@@ -30,9 +30,6 @@ var (
 	ErrNestedTx     = state.ErrNestedTx
 )
 
-// Tx is the public transactional State surface (separate from the non-Tx API).
-type Tx = state.Tx
-
 // DB is an open Es4 handle. Methods implement the public State API and Tx API.
 // Snapshot / Recovery run internally according to Options.Effective().
 type DB struct {
@@ -221,12 +218,13 @@ func (db *DB) restoreOnce(ctx context.Context) error {
 	return nil
 }
 
-// Set stores a JSON value at key.
-func (db *DB) Set(ctx context.Context, key string, value json.RawMessage) error {
+// Set stores a JSON value at key. Optional WithExpiresAt sets an absolute expiry.
+// Omitting expiry clears any prior expiry on overwrite.
+func (db *DB) Set(ctx context.Context, key string, value json.RawMessage, opts ...SetOption) error {
 	if err := db.guard(ctx); err != nil {
 		return err
 	}
-	return db.state.Set(ctx, key, value)
+	return db.state.Set(ctx, key, value, applySetOptions(opts))
 }
 
 // Get returns the JSON value at key. Missing key → ErrNotFound.
@@ -277,7 +275,11 @@ func (db *DB) BeginTx(ctx context.Context) (Tx, error) {
 	if err := db.guard(ctx); err != nil {
 		return nil, err
 	}
-	return db.state.BeginTx(ctx)
+	inner, err := db.state.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return wrapTx(inner), nil
 }
 
 // Ready reports whether startup Restore has finished (or was skipped).
