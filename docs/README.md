@@ -147,7 +147,7 @@ flowchart LR
 - [wishlist](./wishlist.md) — PO メモ（未整理）
 - [specs](./specs/) — 現行仕様
 - [tests](./tests/) — テスト仕様
-- [憲章](./charter/) — 開発ルール
+- [憲章](https://github.com/b4moss/charter/tree/v1/docs/charter) — 開発ルール
 
 ----
 
